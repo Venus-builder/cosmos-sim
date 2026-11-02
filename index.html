@@ -16,7 +16,7 @@
   canvas:active { cursor: grabbing; }
   .panel { position: fixed; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
     padding: 10px 12px; backdrop-filter: blur(6px); }
-  #info { top: 16px; left: 16px; min-width: 240px; max-width: 320px; }
+  #info { top: 16px; left: 16px; min-width: 240px; max-width: 320px; max-height: calc(100dvh - 210px); overflow-y: auto; }
   #era { font-size: 13px; color: var(--accent2); line-height: 1.45; min-height: 2.9em; }
   #age { font-size: 28px; font-weight: 600; letter-spacing: .02em; margin: 2px 0 6px; font-variant-numeric: tabular-nums; }
   dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0; font-size: 13px; }
@@ -135,6 +135,7 @@
 
 <script src="cosmology.js"></script>
 <script src="astro.js"></script>
+<script src="life.js"></script>
 <script src="scenes.js"></script>
 <script>
 (async function () {
@@ -800,7 +801,7 @@ function fadeTo(fn) { const f = $('fade'); f.classList.add('on'); setTimeout(() 
 function clearHaloMarks() { haloMarks.forEach((m) => m.el.remove()); haloMarks = []; }
 function setEventsVisible(v) { $('events').style.display = v ? '' : 'none'; $('tl').style.display = v ? '' : 'none'; }
 scenes = Scenes.create({
-  device, ctx, canvas, format, astro: Astro, cosmo, coarse, toast, fmtYears,
+  device, ctx, canvas, format, astro: Astro, life: Life, cosmo, coarse, toast, fmtYears,
   getDir: () => st.dir, getMult: () => st.mult, getExpo: () => Math.pow(10, Number($('expo').value)),
   ui: { markers: $('markers') },
   setInfo(o) {

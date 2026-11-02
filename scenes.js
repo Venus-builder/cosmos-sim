@@ -328,13 +328,14 @@ function create(env) {
   function enterSystem(sys, from) {
     S.sys = sys; S.kind = 'system'; S.clock = 0; S.pl = null;
     if (from && S.stack[S.stack.length - 1] !== from) S.stack.push(from);
+    sys.planets.forEach((p) => { if (!p.env) p.env = env.life.environment(p, sys.star, sys.star.age); });
     S.orbit = sys.planets.map((p) => astro.orbitPoints(p, 140).map(compress));
     const sq = Math.sqrt(sys.star.L);
     S.hzPts = [0.95 * sq, 1.67 * sq].flatMap((rr) => Array.from({ length: 120 }, (_, k) => { const a = k / 120 * Math.PI * 2; return compress([rr * Math.cos(a), 0, rr * Math.sin(a)]); }));
     const maxA = sys.planets.reduce((m, p) => Math.max(m, p.a * (1 + p.e)), 1);
     cams.system.dist = Math.max(2.2, compress([maxA, 0, 0])[0] * 2.3);
     clearLabels();
-    S.labels = sys.planets.map((p, i) => addLabel(p.name, () => enterPlanet(i), 'pl'));
+    S.labels = sys.planets.map((p, i) => addLabel(p.name + (p.env.nowLiquid ? ' ★' : ''), () => enterPlanet(i), 'pl'));
     env.onEnter('system');
   }
   function enterSun() {
@@ -418,7 +419,7 @@ function create(env) {
       clearLabels();
       if (prev === 'cosmos') { S.kind = 'cosmos'; env.onEnter('cosmos'); }
       else if (prev === 'galaxy') { S.kind = 'galaxy'; S.sys = null; env.onEnter('galaxy'); }
-      else if (prev === 'system') { S.kind = 'system'; S.pl = null; S.labels = S.sys.planets.map((p, i) => addLabel(p.name, () => enterPlanet(i), 'pl')); env.onEnter('system'); }
+      else if (prev === 'system') { S.kind = 'system'; S.pl = null; S.labels = S.sys.planets.map((p, i) => addLabel(p.name + (p.env.nowLiquid ? ' ★' : ''), () => enterPlanet(i), 'pl')); env.onEnter('system'); }
     });
   }
   function onTap(x, y) {
@@ -435,6 +436,19 @@ function create(env) {
 
   const fmt = (x, d) => (x >= 1e4 || (x < 0.01 && x > 0) ? x.toExponential(d === undefined ? 2 : d).replace('e+', '×10^').replace('e-', '×10^-') : x.toFixed(d === undefined ? 2 : d));
   const KIND_JP = { earthlike: '地球型(液体の水が存在しうる)', frozen: '凍結した世界', desert: '砂漠・乾燥した世界', venus: '厚い大気の灼熱世界(金星型)', lava: '溶岩の世界', barren: '大気のない岩石惑星', gas: 'ガス惑星', icegiant: '氷の巨大惑星' };
+  function envRows(p, sys) {
+    const e = p.env, L = env.life, age = sys.star.age;
+    const pct = (x) => (x / e.range * 100).toFixed(2);
+    const stops = e.seg.map((s) => `${L.STATE_COLOR[s.state]} ${pct(s.from)}% ${pct(s.to)}%`).join(',');
+    const bar = `<div style="position:relative;width:170px;height:10px;border-radius:5px;background:linear-gradient(90deg,${stops})"><i style="position:absolute;left:${Math.min(100, age / e.range * 100).toFixed(1)}%;top:-3px;width:2px;height:16px;background:#fff"></i></div><div style="font-size:10px;color:#8e9bc4;display:flex;justify-content:space-between;width:170px"><span>0</span><span>${e.range.toFixed(1)} Gyr</span></div>`;
+    const rows = [['環境の履歴(青=水が可能)', bar], ['いまの状態', L.STATE_JP[e.now.state] || ''], ['恒星の年齢', age.toFixed(1) + ' Gyr(寿命 ' + (e.starEnds > 1e4 ? '>10兆' : e.starEnds.toFixed(1)) + ')']];
+    if (p.type === 'rock') {
+      rows.push(['液体の水の連続期間', e.longest > 0 ? '最長 ' + e.longest.toFixed(2) + ' Gyr' : 'なし']);
+      if (e.nowLiquid) rows.push(['この状態が続くのは', '約 ' + e.windowEnd.toFixed(1) + ' Gyr まで(あと ' + Math.max(0, e.windowEnd - age).toFixed(1) + ' Gyr)']);
+      rows.push(['潮汐固定', e.locked ? '固定済み(同じ面を恒星に向ける)' : e.lockGyr < 1e4 ? 'あと約 ' + Math.max(0, e.lockGyr - age).toFixed(0) + ' Gyr で固定' : 'されない']);
+    }
+    return rows;
+  }
   function info() {
     const g = S.gal, sys = S.sys, p = S.pl;
     const crumb = ['宇宙'];
@@ -454,7 +468,7 @@ function create(env) {
       rows: [['軌道長半径', p.a.toFixed(3) + ' AU(周期 ' + (p.period < 1 ? (p.period * 365.25).toFixed(1) + ' 日' : p.period.toFixed(2) + ' 年') + ')'], ['質量 / 半径', p.massE.toFixed(2) + ' / ' + p.radiusE.toFixed(2) + ' (地球=1)'],
         ['表面重力', p.g.toFixed(2) + ' g'], ['脱出速度', p.vesc.toFixed(1) + ' km/s'], ['平衡温度', Math.round(p.teq) + ' K'], ['表面温度(推定)', Math.round(p.tsurf) + ' K(' + Math.round(p.tsurf - 273.15) + ' ℃)'],
         ['大気', p.atm ? (p.type === 'rock' ? 'あり' : '厚い(水素・ヘリウム主体)') : 'なし(軽いガスは逃げる)'], ['自転', (p.rotH < 100 ? p.rotH.toFixed(1) + ' 時間' : (p.rotH / 24).toFixed(0) + ' 日') + '、傾き ' + p.tilt.toFixed(0) + '°'],
-        ['生命', p.life ? '地球の生命(実際)' : '未判定(第3段階で追加)']] };
+        ['生命', p.life ? '地球の生命(実際)' : '未判定(次の段階で追加)'], ...envRows(p, sys)] };
   }
 
   function frame(dtReal, dpr) {
