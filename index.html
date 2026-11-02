@@ -1,0 +1,824 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>宇宙シミュレーター</title>
+<style>
+  :root {
+    --bg: #02030a; --panel: rgba(8, 12, 28, .74); --line: rgba(120, 150, 255, .28);
+    --fg: #dfe7ff; --dim: #8e9bc4; --accent: #7fa6ff; --accent2: #ffc47a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+    font-family: system-ui, "Yu Gothic UI", "Hiragino Sans", sans-serif; overflow: hidden; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+  canvas:active { cursor: grabbing; }
+  .panel { position: fixed; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 12px; backdrop-filter: blur(6px); }
+  #info { top: 16px; left: 16px; min-width: 240px; max-width: 320px; }
+  #era { font-size: 13px; color: var(--accent2); line-height: 1.45; min-height: 2.9em; }
+  #age { font-size: 28px; font-weight: 600; letter-spacing: .02em; margin: 2px 0 6px; font-variant-numeric: tabular-nums; }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0; font-size: 13px; }
+  dt { color: var(--dim); } dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+  #opts { top: 16px; right: 16px; width: 230px; font-size: 13px; }
+  #opts summary { cursor: pointer; color: var(--accent); }
+  #opts label { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 8px; }
+  #opts select, #opts input[type=range] { width: 120px; }
+  #bar { left: 16px; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; }
+  .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  button { background: rgba(127, 166, 255, .14); color: var(--fg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+  button:hover { background: rgba(127, 166, 255, .3); }
+  button.on { background: var(--accent); color: #02030a; border-color: var(--accent); }
+  button.small { padding: 3px 8px; font-size: 12px; }
+  input[type=range] { accent-color: var(--accent); }
+  #speed { width: 200px; }
+  #speedLbl { font-size: 13px; color: var(--fg); min-width: 15em; font-variant-numeric: tabular-nums; }
+  #tl { flex: 1; width: 100%; }
+  #events { gap: 6px; }
+  #note { font-size: 11px; color: var(--dim); line-height: 1.5; }
+  #toast { position: fixed; left: 50%; top: 18px; transform: translateX(-50%); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 999px; padding: 6px 16px; font-size: 13px; opacity: 0;
+    transition: opacity .25s; pointer-events: none; }
+  #toast.show { opacity: 1; }
+  #fatal { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: var(--bg);
+    padding: 24px; text-align: center; line-height: 1.8; }
+  #fatal.show { display: flex; }
+  @media (max-width: 720px) {
+    #opts { top: auto; bottom: 190px; right: 16px; }
+    #info { max-width: 62vw; min-width: 0; }
+    #age { font-size: 22px; }
+    #speed { width: 130px; }
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="info" class="panel">
+  <div id="era"></div>
+  <div id="age"></div>
+  <dl>
+    <dt>赤方偏移 z</dt><dd id="zv"></dd>
+    <dt>温度(CMB)</dt><dd id="tv"></dd>
+    <dt>宇宙の大きさ(現在=1)</dt><dd id="av"></dd>
+    <dt>計算</dt><dd id="mode"></dd>
+  </dl>
+</div>
+
+<details id="opts" class="panel" open>
+  <summary>設定</summary>
+  <label>粒子数
+    <select id="np">
+      <option value="48">11万 (48³)</option>
+      <option value="64" selected>26万 (64³)</option>
+      <option value="96">88万 (96³)</option>
+    </select>
+  </label>
+  <label>ダークマター表示 <input type="checkbox" id="dm" checked></label>
+  <label>明るさ <input type="range" id="expo" min="-1" max="1" step="0.05" value="0"></label>
+  <label>自動回転 <input type="checkbox" id="rot" checked></label>
+</details>
+
+<div id="bar" class="panel">
+  <div class="row">
+    <button id="bBig" title="ビッグバンに戻す">⏮</button>
+    <button id="bRev" title="逆再生">◀ 逆再生</button>
+    <button id="bPause" title="一時停止">⏸</button>
+    <button id="bPlay" title="再生">▶ 再生</button>
+    <input type="range" id="speed" min="-2" max="5" step="0.05" value="0" title="倍速(対数)">
+    <span id="speedLbl"></span>
+    <button class="small" data-sp="0">×1</button>
+    <button class="small" data-sp="1">×10</button>
+    <button class="small" data-sp="2">×100</button>
+    <button class="small" data-sp="3">×1000</button>
+    <button class="small" data-sp="4">×1万</button>
+  </div>
+  <input type="range" id="tl" min="0" max="1000" step="1" value="0" title="時間軸(ドラッグでジャンプ)">
+  <div class="row" id="events"></div>
+  <div id="note">N体計算はダークマターの粒子で行っています(星・惑星・生命は次の段階)。光の強さは星形成史にもとづく近似です。ドラッグで回転、ホイールで拡大縮小。</div>
+</div>
+
+<div id="toast"></div>
+<div id="fatal"><div id="fatalMsg"></div></div>
+
+<script src="cosmology.js"></script>
+<script>
+(async function () {
+'use strict';
+const $ = (id) => document.getElementById(id);
+
+// ------------------------------------------------------------------ 定数
+const G = 64, G3 = G * G * G;       // PM格子
+const L_BOX = 128;                   // 箱の一辺 [Mpc/h](共動)
+const A_START = 0.02;                // N体計算の開始(z=49)。それ以前は線形成長の解析解
+const A_FREEZE = 20;                 // これ以上膨張したら構造は凍結(膨張のみ)
+const A_REC = 1 / 1091;              // 宇宙の晴れ上がり
+const JIT = 0.5;                     // 格子の乱れ(格子模様を消す)
+const SEED = Number(new URLSearchParams(location.search).get('seed')) || 42;
+const RATE_1X = 1e8 / 60 / 1e9;      // 1倍速: 1秒あたり [Gyr]
+
+const cosmo = Cosmology.create();
+const T_MAX = cosmo.TMAX, T0 = cosmo.tMin;
+const tS = cosmo.tOfA(A_START), tF = cosmo.tOfA(A_FREEZE);
+
+// ------------------------------------------------------------------ 表示ヘルパー
+function toast(msg, ms) {
+  const el = $('toast'); el.textContent = msg; el.classList.add('show');
+  clearTimeout(toast.h); toast.h = setTimeout(() => el.classList.remove('show'), ms || 2200);
+}
+function fatal(html) { $('fatalMsg').innerHTML = html; $('fatal').classList.add('show'); }
+function fmtYears(yr) {
+  const sec = yr * 3.15576e7;
+  if (sec < 60) return sec.toFixed(sec < 10 ? 2 : 1) + '秒';
+  if (sec < 3600) return (sec / 60).toFixed(1) + '分';
+  if (yr < 1) return (sec / 86400).toFixed(1) + '日';
+  if (yr < 1e4) return yr.toFixed(0) + '年';
+  if (yr < 1e8) return (yr / 1e4).toFixed(yr < 1e5 ? 2 : 1) + '万年';
+  if (yr < 1e12) return (yr / 1e8).toFixed(yr < 1e9 ? 3 : 2) + '億年';
+  return (yr / 1e12).toFixed(3) + '兆年';
+}
+function fmtExp(x, unit) {
+  if (x >= 1e4 || x < 0.1) {
+    const [m, e] = x.toExponential(1).split('e');
+    return m + '×10<sup>' + Number(e) + '</sup>' + unit;
+  }
+  return x.toFixed(x < 10 ? 2 : 1) + unit;
+}
+function eraOf(t, a) {
+  if (t < 3.2e-16) return '灼熱の火の玉(電子・陽電子・光が飛び交う)';
+  if (t < 3.8e-8) return 'ビッグバン元素合成(最初の原子核ができる)';
+  if (t < cosmo.tOfA(A_REC)) return '光と物質が混ざった灼熱のプラズマ(宇宙は不透明)';
+  if (t < 0.15) return '宇宙の晴れ上がり → 暗黒時代(星はまだない)';
+  if (t < 0.5) return '宇宙の夜明け(最初の星々が灯る)';
+  if (t < 3) return '銀河とフィラメントの成長';
+  if (t < 5) return '宇宙の正午(星形成のピーク付近)';
+  if (t < cosmo.tNow - 4.7) return '銀河団が育つ時代';
+  if (t < cosmo.tNow - 0.1) return '太陽系の誕生(46億年前)を経て現在へ';
+  if (t < cosmo.tNow + 0.1) return '現在の宇宙(138億年)';
+  if (t < 60) return '未来: 暗黒エネルギーで加速膨張する宇宙';
+  return '未来: 銀河団が孤立し、星々が暗くなっていく';
+}
+
+// ------------------------------------------------------------------ WebGPU 初期化
+if (!navigator.gpu) {
+  fatal('このブラウザは <b>WebGPU</b> に対応していません。<br>最新の Chrome / Edge で開いてください。');
+  return;
+}
+const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+if (!adapter) { fatal('GPU(WebGPUアダプター)が見つかりませんでした。'); return; }
+const device = await adapter.requestDevice();
+device.lost.then((info) => fatal('GPUとの接続が失われました: ' + info.message + '<br>ページを再読み込みしてください。'));
+device.addEventListener('uncapturederror', (e) => { console.error(e.error.message); toast('GPUエラー: ' + e.error.message.slice(0, 80), 5000); });
+
+const canvas = $('c');
+const ctx = canvas.getContext('webgpu');
+const format = navigator.gpu.getPreferredCanvasFormat();
+ctx.configure({ device, format, alphaMode: 'opaque' });
+
+// ------------------------------------------------------------------ シェーダー
+const computeWGSL = /* wgsl */`
+struct P { np: u32, g: u32, n: u32, pad0: u32,
+           a: f32, dscale: f32, velamp: f32, drift: f32,
+           kick1: f32, kick2: f32, jit: f32, mean: f32 };
+struct FP { axis: u32, sgn: f32, base: u32, pad0: u32 };
+@group(0) @binding(0) var<uniform> prm: P;
+@group(0) @binding(1) var<storage, read_write> pos: array<vec4f>;
+@group(0) @binding(2) var<storage, read_write> mom: array<vec4f>;
+@group(0) @binding(3) var<storage, read> psi: array<vec4f>;
+@group(0) @binding(4) var<storage, read_write> grid: array<atomic<u32>>;
+@group(0) @binding(5) var<storage, read_write> cplx: array<vec2f>;
+@group(0) @binding(6) var<storage, read_write> densF: array<f32>;
+@group(0) @binding(7) var<uniform> fp: FP;
+
+const G3: u32 = 262144u;
+
+fn pcg(v: u32) -> u32 {
+  let s = v * 747796405u + 2891336453u;
+  let w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
+  return (w >> 22u) ^ w;
+}
+fn hash3(i: u32) -> vec3f {
+  let a = pcg(i); let b = pcg(a); let c = pcg(b);
+  return vec3f(f32(a >> 8u), f32(b >> 8u), f32(c >> 8u)) / 16777216.0;
+}
+fn qOf(i: u32) -> vec3f {
+  let np = prm.np;
+  let ix = i % np; let iy = (i / np) % np; let iz = i / (np * np);
+  let h = hash3(i);
+  return (vec3f(f32(ix), f32(iy), f32(iz)) + 0.5 + (h - 0.5) * prm.jit) / f32(np);
+}
+fn cellIdx(c: vec3i) -> u32 {
+  let m = vec3u(c & vec3i(63));
+  return m.x + (m.y << 6u) + (m.z << 12u);
+}
+
+@compute @workgroup_size(64)
+fn analytic(@builtin(global_invocation_id) gid: vec3u) {
+  let i = gid.x; if (i >= prm.n) { return; }
+  let ps = psi[i].xyz;
+  var x = qOf(i) + prm.dscale * ps;
+  x = x - floor(x);
+  pos[i] = vec4f(x, 0.0);
+  mom[i] = vec4f(prm.velamp * ps, 0.0);
+}
+
+@compute @workgroup_size(64)
+fn clearGrid(@builtin(global_invocation_id) gid: vec3u) {
+  if (gid.x < G3) { atomicStore(&grid[gid.x], 0u); }
+}
+
+@compute @workgroup_size(64)
+fn deposit(@builtin(global_invocation_id) gid: vec3u) {
+  let i = gid.x; if (i >= prm.n) { return; }
+  let u = pos[i].xyz * 64.0;
+  let b = floor(u); let f = u - b; let bi = vec3i(b);
+  for (var dz = 0; dz < 2; dz++) {
+    for (var dy = 0; dy < 2; dy++) {
+      for (var dx = 0; dx < 2; dx++) {
+        let w = select(1.0 - f.x, f.x, dx == 1) * select(1.0 - f.y, f.y, dy == 1) * select(1.0 - f.z, f.z, dz == 1);
+        atomicAdd(&grid[cellIdx(bi + vec3i(dx, dy, dz))], u32(w * 1024.0 + 0.5));
+      }
+    }
+  }
+}
+
+@compute @workgroup_size(64)
+fn toComplex(@builtin(global_invocation_id) gid: vec3u) {
+  let i = gid.x; if (i >= G3) { return; }
+  let c = f32(atomicLoad(&grid[i])) / (prm.mean * 1024.0);
+  cplx[i] = vec2f(c - 1.0, 0.0);
+  densF[i] = c;
+}
+
+var<workgroup> sh: array<vec2f, 64>;
+@compute @workgroup_size(64)
+fn fft(@builtin(local_invocation_id) lid: vec3u, @builtin(workgroup_id) wid: vec3u) {
+  let j = lid.x; let l = wid.x;
+  let a = l & 63u; let b = l >> 6u;
+  var base = 0u; var stride = 1u;
+  if (fp.axis == 0u) { base = l << 6u; stride = 1u; }
+  else if (fp.axis == 1u) { base = a + (b << 12u); stride = 64u; }
+  else { base = a + (b << 6u); stride = 4096u; }
+  let gi = fp.base + base + j * stride;
+  sh[reverseBits(j) >> 26u] = cplx[gi];
+  workgroupBarrier();
+  for (var s = 1u; s <= 6u; s++) {
+    let m = 1u << s; let hf = m >> 1u;
+    if (j < 32u) {
+      let grp = j / hf; let p = j % hf;
+      let i0 = grp * m + p; let i1 = i0 + hf;
+      let ang = fp.sgn * 6.283185307179586 * f32(p) / f32(m);
+      let w = vec2f(cos(ang), sin(ang));
+      let o = sh[i1];
+      let t = vec2f(w.x * o.x - w.y * o.y, w.x * o.y + w.y * o.x);
+      let u = sh[i0];
+      sh[i0] = u + t;
+      sh[i1] = u - t;
+    }
+    workgroupBarrier();
+  }
+  cplx[gi] = sh[j];
+}
+
+// 力のスペクトル F_k = i k δ_k / k²(係数 C は kick 側で掛ける)
+@compute @workgroup_size(64)
+fn forceSpec(@builtin(global_invocation_id) gid: vec3u) {
+  let i = gid.x; if (i >= G3) { return; }
+  let ix = i & 63u; let iy = (i >> 6u) & 63u; let iz = i >> 12u;
+  let nx = select(f32(ix), f32(ix) - 64.0, ix > 32u);
+  let ny = select(f32(iy), f32(iy) - 64.0, iy > 32u);
+  let nz = select(f32(iz), f32(iz) - 64.0, iz > 32u);
+  let n2 = nx * nx + ny * ny + nz * nz;
+  if (n2 == 0.0) {
+    cplx[G3 + i] = vec2f(0.0); cplx[2u * G3 + i] = vec2f(0.0); cplx[3u * G3 + i] = vec2f(0.0);
+    return;
+  }
+  let k2 = 39.47841760435743 * n2;
+  let d = cplx[i];
+  let q = vec2f(-d.y, d.x) / k2;
+  let kc = 6.283185307179586;
+  cplx[G3 + i] = q * (kc * nx * select(1.0, 0.0, ix == 32u));
+  cplx[2u * G3 + i] = q * (kc * ny * select(1.0, 0.0, iy == 32u));
+  cplx[3u * G3 + i] = q * (kc * nz * select(1.0, 0.0, iz == 32u));
+}
+
+fn sampleF(x: vec3f) -> vec3f {
+  let u = x * 64.0;
+  let b = floor(u); let f = u - b; let bi = vec3i(b);
+  var F = vec3f(0.0);
+  for (var dz = 0; dz < 2; dz++) {
+    for (var dy = 0; dy < 2; dy++) {
+      for (var dx = 0; dx < 2; dx++) {
+        let w = select(1.0 - f.x, f.x, dx == 1) * select(1.0 - f.y, f.y, dy == 1) * select(1.0 - f.z, f.z, dz == 1);
+        let id = cellIdx(bi + vec3i(dx, dy, dz));
+        F += w * vec3f(cplx[G3 + id].x, cplx[2u * G3 + id].x, cplx[3u * G3 + id].x);
+      }
+    }
+  }
+  return F / 262144.0;
+}
+
+@compute @workgroup_size(64)
+fn kick1(@builtin(global_invocation_id) gid: vec3u) {
+  let i = gid.x; if (i >= prm.n) { return; }
+  mom[i] = vec4f(mom[i].xyz + sampleF(pos[i].xyz) * prm.kick1, 0.0);
+}
+@compute @workgroup_size(64)
+fn kick2(@builtin(global_invocation_id) gid: vec3u) {
+  let i = gid.x; if (i >= prm.n) { return; }
+  mom[i] = vec4f(mom[i].xyz + sampleF(pos[i].xyz) * prm.kick2, 0.0);
+}
+@compute @workgroup_size(64)
+fn driftK(@builtin(global_invocation_id) gid: vec3u) {
+  let i = gid.x; if (i >= prm.n) { return; }
+  var x = pos[i].xyz + mom[i].xyz * prm.drift;
+  x = x - floor(x);
+  pos[i] = vec4f(x, 0.0);
+}
+`;
+
+const renderWGSL = /* wgsl */`
+struct R { vp: mat4x4f, a: vec4f, b: vec4f, c: vec4f };
+@group(0) @binding(0) var<uniform> r: R;
+@group(0) @binding(1) var<storage, read> pos: array<vec4f>;
+@group(0) @binding(2) var<storage, read> dens: array<f32>;
+
+struct VO { @builtin(position) p: vec4f, @location(0) uv: vec2f, @location(1) col: vec3f };
+
+@vertex
+fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> VO {
+  var corners = array<vec2f, 6>(vec2f(-1.0, -1.0), vec2f(1.0, -1.0), vec2f(-1.0, 1.0),
+                                vec2f(-1.0, 1.0), vec2f(1.0, -1.0), vec2f(1.0, 1.0));
+  let c = corners[vi];
+  let x = pos[ii].xyz;
+  let cell = vec3u(clamp(vec3i(floor(x * 64.0)), vec3i(0), vec3i(63)));
+  let rho = max(dens[cell.x + (cell.y << 6u) + (cell.z << 12u)], 0.02);
+  let world = (x - 0.5) * r.a.z;
+  var clip = r.vp * vec4f(world, 1.0);
+  let px = r.a.w * (1.0 + 0.2 * clamp(log(rho), 0.0, 4.0));
+  clip = vec4f(clip.xy + c * px * 2.0 / r.a.xy * clip.w, clip.z, clip.w);
+  let dm = vec3f(0.28, 0.38, 1.0) * (r.b.y * 0.035 * pow(rho, 0.5));
+  let hot = clamp(log(rho) / 5.0, 0.0, 1.0);
+  let star = mix(vec3f(1.0, 0.62, 0.26), vec3f(0.82, 0.9, 1.0), hot) * (r.b.z * 0.012 * pow(min(rho, 60.0), 1.1));
+  var o: VO;
+  o.p = clip; o.uv = c; o.col = (dm + star) * r.b.x * r.b.w;
+  return o;
+}
+@fragment
+fn fs(i: VO) -> @location(0) vec4f {
+  let d = dot(i.uv, i.uv);
+  if (d > 1.0) { discard; }
+  return vec4f(i.col * exp(-d * 3.5), 1.0);
+}
+
+struct PO { @builtin(position) p: vec4f, @location(0) uv: vec2f };
+@vertex
+fn vsPlasma(@builtin(vertex_index) vi: u32) -> PO {
+  var p = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
+  var o: PO;
+  o.p = vec4f(p[vi], 0.0, 1.0); o.uv = p[vi] * 0.5 + 0.5;
+  return o;
+}
+fn hash21(p: vec2f) -> f32 {
+  var q = fract(p * vec2f(123.34, 456.21));
+  q += dot(q, q + 45.32);
+  return fract(q.x * q.y);
+}
+fn vnoise(p: vec2f) -> f32 {
+  let i = floor(p); let f = fract(p); let u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash21(i), hash21(i + vec2f(1.0, 0.0)), u.x),
+             mix(hash21(i + vec2f(0.0, 1.0)), hash21(i + vec2f(1.0, 1.0)), u.x), u.y);
+}
+fn fbm(p: vec2f) -> f32 {
+  var s = 0.0; var a = 0.5; var q = p;
+  for (var k = 0; k < 5; k++) { s += a * vnoise(q); q = q * 2.03 + vec2f(17.1, 9.2); a *= 0.5; }
+  return s;
+}
+fn bbColor(T: f32) -> vec3f {
+  let t = clamp(T, 1000.0, 40000.0) / 100.0;
+  var red = 1.0; var green = 1.0; var blue = 1.0;
+  if (t > 66.0) { red = clamp(1.2929 * pow(t - 60.0, -0.1332047592), 0.0, 1.0); }
+  if (t <= 66.0) { green = clamp(0.39008 * log(t) - 0.63184, 0.0, 1.0); }
+  else { green = clamp(1.12989 * pow(t - 60.0, -0.0755148492), 0.0, 1.0); }
+  if (t < 66.0) { blue = select(clamp(0.5432 * log(t - 10.0) - 1.19625, 0.0, 1.0), 0.0, t <= 19.0); }
+  return vec3f(red, green, blue);
+}
+@fragment
+fn fsPlasma(i: PO) -> @location(0) vec4f {
+  let asp = r.a.x / r.a.y;
+  let p = (i.uv - 0.5) * vec2f(asp, 1.0) * 3.0;
+  let n = fbm(p + vec2f(r.c.x * 0.03, -r.c.x * 0.02));
+  let n2 = fbm(p * 2.0 - vec2f(r.c.x * 0.05, 0.0));
+  let v = max(0.55 + 0.9 * (n - 0.5) + 0.4 * (n2 - 0.5), 0.0);
+  let vig = 1.0 - 0.35 * dot(i.uv - 0.5, i.uv - 0.5) * 2.0;
+  return vec4f(bbColor(r.c.z) * v * vig * 0.85 * r.c.y, 1.0);
+}
+`;
+
+async function makeModule(code, label) {
+  const m = device.createShaderModule({ code, label });
+  const info = await m.getCompilationInfo();
+  const errs = info.messages.filter((x) => x.type === 'error');
+  info.messages.forEach((x) => console[x.type === 'error' ? 'error' : 'warn'](label, x.lineNum + ':' + x.linePos, x.message));
+  if (errs.length) throw new Error(label + ' のシェーダーエラー: ' + errs.map((x) => x.lineNum + ': ' + x.message).join(' / '));
+  return m;
+}
+let computeModule, renderModule;
+try {
+  computeModule = await makeModule(computeWGSL, 'compute');
+  renderModule = await makeModule(renderWGSL, 'render');
+} catch (e) { fatal('シェーダーの読み込みに失敗しました。<br><small>' + e.message + '</small>'); throw e; }
+
+const C = GPUShaderStage.COMPUTE;
+const bgl = device.createBindGroupLayout({ entries: [
+  { binding: 0, visibility: C, buffer: { type: 'uniform' } },
+  { binding: 1, visibility: C, buffer: { type: 'storage' } },
+  { binding: 2, visibility: C, buffer: { type: 'storage' } },
+  { binding: 3, visibility: C, buffer: { type: 'read-only-storage' } },
+  { binding: 4, visibility: C, buffer: { type: 'storage' } },
+  { binding: 5, visibility: C, buffer: { type: 'storage' } },
+  { binding: 6, visibility: C, buffer: { type: 'storage' } },
+  { binding: 7, visibility: C, buffer: { type: 'uniform' } },
+] });
+const cLayout = device.createPipelineLayout({ bindGroupLayouts: [bgl] });
+const P = {};
+for (const name of ['analytic', 'clearGrid', 'deposit', 'toComplex', 'fft', 'forceSpec', 'kick1', 'kick2', 'driftK']) {
+  P[name] = device.createComputePipeline({ layout: cLayout, compute: { module: computeModule, entryPoint: name } });
+}
+
+const rbgl = device.createBindGroupLayout({ entries: [
+  { binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
+  { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
+  { binding: 2, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
+] });
+const rLayout = device.createPipelineLayout({ bindGroupLayouts: [rbgl] });
+const additive = { color: { srcFactor: 'one', dstFactor: 'one', operation: 'add' }, alpha: { srcFactor: 'one', dstFactor: 'one', operation: 'add' } };
+const partPipe = device.createRenderPipeline({ layout: rLayout,
+  vertex: { module: renderModule, entryPoint: 'vs' },
+  fragment: { module: renderModule, entryPoint: 'fs', targets: [{ format, blend: additive }] },
+  primitive: { topology: 'triangle-list' } });
+const plasmaPipe = device.createRenderPipeline({ layout: rLayout,
+  vertex: { module: renderModule, entryPoint: 'vsPlasma' },
+  fragment: { module: renderModule, entryPoint: 'fsPlasma', targets: [{ format }] },
+  primitive: { topology: 'triangle-list' } });
+
+// ------------------------------------------------------------------ 初期ゆらぎ(CPU): ガウス乱数場 → Zel'dovich 変位場
+function mulberry32(a) { return function () { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+const REV = new Uint8Array(64);
+for (let i = 0; i < 64; i++) { let r = 0; for (let b = 0; b < 6; b++) if (i & (1 << b)) r |= 1 << (5 - b); REV[i] = r; }
+const COS64 = new Float64Array(64), SIN64 = new Float64Array(64);
+for (let k = 0; k < 64; k++) { COS64[k] = Math.cos(2 * Math.PI * k / 64); SIN64[k] = Math.sin(2 * Math.PI * k / 64); }
+function fft3(re, im, sign) {
+  const tr = new Float64Array(64), ti = new Float64Array(64);
+  for (let axis = 0; axis < 3; axis++) {
+    for (let l = 0; l < 4096; l++) {
+      const a = l & 63, b = l >> 6;
+      let base, stride;
+      if (axis === 0) { base = l << 6; stride = 1; } else if (axis === 1) { base = a + (b << 12); stride = 64; } else { base = a + (b << 6); stride = 4096; }
+      for (let j = 0; j < 64; j++) { tr[REV[j]] = re[base + j * stride]; ti[REV[j]] = im[base + j * stride]; }
+      for (let s = 1; s <= 6; s++) {
+        const m = 1 << s, hf = m >> 1, step = 64 / m;
+        for (let grp = 0; grp < 64; grp += m) {
+          for (let p = 0; p < hf; p++) {
+            const wr = COS64[p * step], wi = sign * SIN64[p * step];
+            const i0 = grp + p, i1 = i0 + hf;
+            const xr = wr * tr[i1] - wi * ti[i1], xi = wr * ti[i1] + wi * tr[i1];
+            tr[i1] = tr[i0] - xr; ti[i1] = ti[i0] - xi; tr[i0] += xr; ti[i0] += xi;
+          }
+        }
+      }
+      for (let j = 0; j < 64; j++) { re[base + j * stride] = tr[j]; im[base + j * stride] = ti[j]; }
+    }
+  }
+}
+function generatePsiGrids(seed) {
+  const h = cosmo.h, Om = cosmo.Om, ns = 0.965, sigma8 = 0.81;
+  const bbks = (k) => { const q = k / (Om * h); return Math.log(1 + 2.34 * q) / (2.34 * q) * Math.pow(1 + 3.89 * q + Math.pow(16.1 * q, 2) + Math.pow(5.46 * q, 3) + Math.pow(6.71 * q, 4), -0.25); };
+  const Pun = (k) => Math.pow(k, ns) * Math.pow(bbks(k), 2);
+  let s = 0; const dl = 0.01;
+  for (let lk = Math.log(1e-4); lk < Math.log(1e2); lk += dl) {
+    const k = Math.exp(lk), x = 8 * k;
+    const W = x < 0.01 ? 1 - x * x / 10 : 3 * (Math.sin(x) - x * Math.cos(x)) / (x * x * x);
+    s += k * k * k * Pun(k) * W * W * dl;
+  }
+  const A = sigma8 * sigma8 / (s / (2 * Math.PI * Math.PI));
+  const rnd = mulberry32(seed);
+  const gauss = () => Math.sqrt(-2 * Math.log(1 - rnd())) * Math.cos(2 * Math.PI * rnd());
+  const re = new Float64Array(G3), im = new Float64Array(G3);
+  for (let i = 0; i < G3; i++) re[i] = gauss();
+  fft3(re, im, -1);
+  const V = Math.pow(L_BOX, 3);
+  const nOf = (i) => (i <= 32 ? i : i - 64);
+  const dRe = new Float64Array(G3), dIm = new Float64Array(G3);
+  for (let i = 0; i < G3; i++) {
+    const nx = nOf(i & 63), ny = nOf((i >> 6) & 63), nz = nOf(i >> 12);
+    const n2 = nx * nx + ny * ny + nz * nz;
+    if (n2 === 0) continue;
+    const k = 2 * Math.PI * Math.sqrt(n2) / L_BOX;
+    const amp = Math.sqrt(A * Pun(k) / V / G3);
+    dRe[i] = re[i] * amp; dIm[i] = im[i] * amp;
+  }
+  const out = [];
+  for (let c = 0; c < 3; c++) {
+    const pr = new Float64Array(G3), pi = new Float64Array(G3);
+    for (let i = 0; i < G3; i++) {
+      const ni = [i & 63, (i >> 6) & 63, i >> 12];
+      const nx = nOf(ni[0]), ny = nOf(ni[1]), nz = nOf(ni[2]);
+      const n2 = nx * nx + ny * ny + nz * nz;
+      if (n2 === 0 || ni[c] === 32) continue;
+      const f = nOf(ni[c]) / (2 * Math.PI * n2);
+      pr[i] = -dIm[i] * f; pi[i] = dRe[i] * f;
+    }
+    fft3(pr, pi, +1);
+    out.push(Float32Array.from(pr));
+  }
+  return out;
+}
+function pcgJs(v) {
+  const s = (Math.imul(v >>> 0, 747796405) + 2891336453) >>> 0;
+  const w = Math.imul(((s >>> ((s >>> 28) + 4)) ^ s) >>> 0, 277803737) >>> 0;
+  return ((w >>> 22) ^ w) >>> 0;
+}
+function psiForParticles(grids, np) {
+  const N = np * np * np, out = new Float32Array(N * 4);
+  for (let i = 0; i < N; i++) {
+    const ix = i % np, iy = Math.floor(i / np) % np, iz = Math.floor(i / (np * np));
+    const a = pcgJs(i), b = pcgJs(a), c = pcgJs(b);
+    const hx = (a >>> 8) / 16777216, hy = (b >>> 8) / 16777216, hz = (c >>> 8) / 16777216;
+    let qx = (ix + 0.5 + (hx - 0.5) * JIT) / np, qy = (iy + 0.5 + (hy - 0.5) * JIT) / np, qz = (iz + 0.5 + (hz - 0.5) * JIT) / np;
+    qx -= Math.floor(qx); qy -= Math.floor(qy); qz -= Math.floor(qz);
+    const ux = qx * G, uy = qy * G, uz = qz * G;
+    const x0 = Math.floor(ux), y0 = Math.floor(uy), z0 = Math.floor(uz);
+    const fx = ux - x0, fy = uy - y0, fz = uz - z0;
+    for (let c2 = 0; c2 < 3; c2++) {
+      const gr = grids[c2]; let v = 0;
+      for (let dz = 0; dz < 2; dz++) for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
+        const w = (dx ? fx : 1 - fx) * (dy ? fy : 1 - fy) * (dz ? fz : 1 - fz);
+        v += w * gr[((x0 + dx) & 63) + (((y0 + dy) & 63) << 6) + (((z0 + dz) & 63) << 12)];
+      }
+      out[i * 4 + c2] = v;
+    }
+  }
+  return out;
+}
+let psiGrids = null;
+
+// ------------------------------------------------------------------ GPU状態
+let N = 0, np = 64, bufs = null, bgMain = null, bgFwd = [], bgInv = [], renderBG = null, renderUBuf = null;
+const paramBuf = device.createBuffer({ size: 48, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+function mkFP(axis, sgn, base) {
+  const b = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  const dv = new DataView(new ArrayBuffer(16));
+  dv.setUint32(0, axis, true); dv.setFloat32(4, sgn, true); dv.setUint32(8, base, true);
+  device.queue.writeBuffer(b, 0, dv.buffer);
+  return b;
+}
+const fpFwd = [0, 1, 2].map((ax) => mkFP(ax, -1, 0));
+const fpInv = [1, 2, 3].map((slot) => [0, 1, 2].map((ax) => mkFP(ax, +1, slot * G3)));
+
+const st = { t: T0, dir: 0, mult: 1, seek: null, forceValid: false, analyticDirty: true, densDirty: true, mode: '', limited: false };
+
+function rebuild(newNp) {
+  if (bufs) Object.values(bufs).forEach((b) => b.destroy());
+  np = newNp; N = np * np * np;
+  const S = GPUBufferUsage.STORAGE, D = GPUBufferUsage.COPY_DST;
+  bufs = {
+    pos: device.createBuffer({ size: N * 16, usage: S }),
+    mom: device.createBuffer({ size: N * 16, usage: S }),
+    psi: device.createBuffer({ size: N * 16, usage: S | D }),
+    grid: device.createBuffer({ size: G3 * 4, usage: S }),
+    cplx: device.createBuffer({ size: 4 * G3 * 8, usage: S }),
+    densF: device.createBuffer({ size: G3 * 4, usage: S }),
+  };
+  if (!psiGrids) psiGrids = generatePsiGrids(SEED);
+  device.queue.writeBuffer(bufs.psi, 0, psiForParticles(psiGrids, np));
+  const mk = (fpb) => device.createBindGroup({ layout: bgl, entries: [
+    { binding: 0, resource: { buffer: paramBuf } }, { binding: 1, resource: { buffer: bufs.pos } },
+    { binding: 2, resource: { buffer: bufs.mom } }, { binding: 3, resource: { buffer: bufs.psi } },
+    { binding: 4, resource: { buffer: bufs.grid } }, { binding: 5, resource: { buffer: bufs.cplx } },
+    { binding: 6, resource: { buffer: bufs.densF } }, { binding: 7, resource: { buffer: fpb } },
+  ] });
+  bgMain = mk(fpFwd[0]);
+  bgFwd = fpFwd.map(mk);
+  bgInv = fpInv.map((row) => row.map(mk));
+  if (!renderUBuf) renderUBuf = device.createBuffer({ size: 112, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  renderBG = device.createBindGroup({ layout: rbgl, entries: [
+    { binding: 0, resource: { buffer: renderUBuf } }, { binding: 1, resource: { buffer: bufs.pos } }, { binding: 2, resource: { buffer: bufs.densF } },
+  ] });
+  st.forceValid = false; st.analyticDirty = true; st.densDirty = true;
+}
+
+const dv48 = new DataView(new ArrayBuffer(48));
+function writeParams(o) {
+  dv48.setUint32(0, np, true); dv48.setUint32(4, G, true); dv48.setUint32(8, N, true); dv48.setUint32(12, 0, true);
+  dv48.setFloat32(16, o.a || 0, true); dv48.setFloat32(20, o.dscale || 0, true);
+  dv48.setFloat32(24, o.velamp || 0, true); dv48.setFloat32(28, o.drift || 0, true);
+  dv48.setFloat32(32, o.kick1 || 0, true); dv48.setFloat32(36, o.kick2 || 0, true);
+  dv48.setFloat32(40, JIT, true); dv48.setFloat32(44, N / G3, true);
+  device.queue.writeBuffer(paramBuf, 0, dv48.buffer);
+}
+const gP = () => Math.ceil(N / 64), gG = G3 / 64;
+function run(pass, name, groups, bg) { pass.setPipeline(P[name]); pass.setBindGroup(0, bg || bgMain); pass.dispatchWorkgroups(groups); }
+function encodeDensity(pass) { run(pass, 'clearGrid', gG); run(pass, 'deposit', gP()); run(pass, 'toComplex', gG); }
+function encodeForce(pass) {
+  encodeDensity(pass);
+  for (let ax = 0; ax < 3; ax++) run(pass, 'fft', 4096, bgFwd[ax]);
+  run(pass, 'forceSpec', gG);
+  for (let s = 0; s < 3; s++) for (let ax = 0; ax < 3; ax++) run(pass, 'fft', 4096, bgInv[s][ax]);
+}
+function submit(fn) {
+  const enc = device.createCommandEncoder(); const pass = enc.beginComputePass();
+  fn(pass); pass.end(); device.queue.submit([enc.finish()]);
+}
+
+function flushAnalytic() {
+  const a = cosmo.aOfT(Math.min(st.t, tS));
+  const Dv = cosmo.D(a), f = cosmo.f(a), Hh = cosmo.H(a);
+  writeParams({ a, dscale: Dv, velamp: a * a * Hh * f * Dv });
+  submit((pass) => { run(pass, 'analytic', gP()); encodeDensity(pass); });
+  st.forceValid = false; st.analyticDirty = false; st.densDirty = false;
+}
+function stepNbody(dt) {
+  const t = st.t;
+  const Cf = (a) => 1.5 * cosmo.H0 * cosmo.H0 * cosmo.Om / a;
+  const am = cosmo.aOfT(t + dt * 0.5);
+  writeParams({ kick1: Cf(cosmo.aOfT(t + dt * 0.25)) * dt * 0.5, kick2: Cf(cosmo.aOfT(t + dt * 0.75)) * dt * 0.5, drift: dt / (am * am) });
+  submit((pass) => {
+    if (!st.forceValid) encodeForce(pass);
+    run(pass, 'kick1', gP()); run(pass, 'driftK', gP());
+    encodeForce(pass);
+    run(pass, 'kick2', gP());
+  });
+  st.forceValid = true; st.densDirty = false;
+}
+
+// want: 宇宙時間の進み(Gyr, 符号つき)。budget: 1フレームで回すN体ステップ数の上限
+function simulate(want, budget) {
+  const target = Math.min(Math.max(st.t + want, T0), T_MAX);
+  let steps = 0, limited = false;
+  while (st.t !== target) {
+    const dir = target > st.t ? 1 : -1;
+    const inAnalytic = dir > 0 ? st.t < tS : st.t <= tS;
+    if (inAnalytic) {
+      st.t = dir > 0 ? Math.min(target, tS) : target;
+      st.analyticDirty = true; st.mode = 'analytic';
+      continue;
+    }
+    if ((dir > 0 && st.t >= tF) || (dir < 0 && st.t > tF)) {
+      st.t = dir > 0 ? target : Math.max(target, tF);
+      st.mode = 'frozen';
+      continue;
+    }
+    if (steps >= budget) { limited = true; break; }
+    if (st.analyticDirty) flushAnalytic();
+    const dtMax = 0.02 / cosmo.H(cosmo.aOfT(st.t));
+    const limit = dir > 0 ? Math.min(target, tF) : Math.max(target, tS);
+    const gap = Math.abs(limit - st.t);
+    const newT = gap <= dtMax ? limit : st.t + dir * dtMax;
+    stepNbody(newT - st.t);
+    st.t = newT; steps++; st.mode = 'nbody';
+  }
+  if (st.analyticDirty && st.t <= tS) flushAnalytic();
+  st.limited = limited;
+  return limited;
+}
+
+// ------------------------------------------------------------------ カメラ
+const cam = { az: 0.6, el: 0.35, dist: 2.2, rot: true };
+function perspective(fovy, aspect, near, far) {
+  const f = 1 / Math.tan(fovy / 2), nf = 1 / (near - far);
+  return new Float32Array([f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, far * nf, -1, 0, 0, far * near * nf, 0]);
+}
+function lookAt(e, c, u) {
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const nrm = (a) => { const l = Math.hypot(a[0], a[1], a[2]); return [a[0] / l, a[1] / l, a[2] / l]; };
+  const crs = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const z = nrm(sub(e, c)), x = nrm(crs(u, z)), y = crs(z, x);
+  return new Float32Array([x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -dot(x, e), -dot(y, e), -dot(z, e), 1]);
+}
+function mul(a, b) {
+  const o = new Float32Array(16);
+  for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + r] * b[c * 4 + k]; o[c * 4 + r] = s; }
+  return o;
+}
+const ptrs = new Map(); let pinch0 = 0;
+canvas.addEventListener('pointerdown', (e) => { canvas.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, [e.clientX, e.clientY]); if (ptrs.size === 2) { const [p, q] = [...ptrs.values()]; pinch0 = Math.hypot(p[0] - q[0], p[1] - q[1]); } });
+canvas.addEventListener('pointermove', (e) => {
+  if (!ptrs.has(e.pointerId)) return;
+  const prev = ptrs.get(e.pointerId); ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+  if (ptrs.size === 1) { cam.az -= (e.clientX - prev[0]) * 0.005; cam.el = Math.max(-1.5, Math.min(1.5, cam.el + (e.clientY - prev[1]) * 0.005)); }
+  else if (ptrs.size === 2) { const [p, q] = [...ptrs.values()]; const d = Math.hypot(p[0] - q[0], p[1] - q[1]); if (pinch0 > 0) cam.dist = Math.min(8, Math.max(0.15, cam.dist * pinch0 / d)); pinch0 = d; }
+});
+const upPtr = (e) => { ptrs.delete(e.pointerId); pinch0 = 0; };
+canvas.addEventListener('pointerup', upPtr); canvas.addEventListener('pointercancel', upPtr);
+canvas.addEventListener('wheel', (e) => { e.preventDefault(); cam.dist = Math.min(8, Math.max(0.15, cam.dist * Math.exp(e.deltaY * 0.001))); }, { passive: false });
+
+// ------------------------------------------------------------------ UI
+const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+// 時間軸: 左15%=ビッグバン〜1万年(対数)、右85%=1万年〜2000億年(対数)
+const LOG_T0 = Math.log10(T0), LOG_MID = -5, LOG_MAX = Math.log10(T_MAX);
+const tToU = (t) => { const l = Math.log10(Math.max(t, T0)); return l < LOG_MID ? 150 * (l - LOG_T0) / (LOG_MID - LOG_T0) : 150 + 850 * (l - LOG_MID) / (LOG_MAX - LOG_MID); };
+const uToT = (u) => Math.pow(10, u < 150 ? LOG_T0 + (u / 150) * (LOG_MID - LOG_T0) : LOG_MID + ((u - 150) / 850) * (LOG_MAX - LOG_MID));
+const EVENTS = [
+  ['ビッグバン', T0], ['元素合成', 3.2e-16 * 3], ['晴れ上がり', cosmo.tOfA(A_REC)], ['最初の星', cosmo.tOfA(1 / 21)],
+  ['銀河の形成', cosmo.tOfA(1 / 7)], ['宇宙の正午', cosmo.tOfA(1 / 3)], ['太陽系誕生', cosmo.tNow - 4.6],
+  ['現在', cosmo.tNow], ['500億年後', 50], ['2000億年後', 200],
+];
+EVENTS.forEach(([name, t]) => {
+  const b = document.createElement('button'); b.className = 'small'; b.textContent = name; b.title = fmtYears(t * 1e9);
+  b.onclick = () => { st.seek = t; toast('「' + name + '」へ移動中…'); };
+  $('events').appendChild(b);
+});
+function setDir(d) { st.dir = d; st.seek = null; $('bRev').classList.toggle('on', d < 0); $('bPlay').classList.toggle('on', d > 0); $('bPause').classList.toggle('on', d === 0); }
+$('bPlay').onclick = () => setDir(1); $('bRev').onclick = () => setDir(-1); $('bPause').onclick = () => setDir(0);
+$('bBig').onclick = () => { st.seek = T0; };
+function setSpeed(v) {
+  $('speed').value = v; st.mult = Math.pow(10, Number(v));
+  const mult = st.mult;
+  $('speedLbl').textContent = '×' + (mult >= 100 ? mult.toFixed(0) : mult >= 10 ? mult.toFixed(1) : mult.toFixed(2)) + '(1秒 = ' + fmtYears(mult * RATE_1X * 1e9) + ')' + (mult === 1 ? '〔1分=1億年〕' : '');
+}
+$('speed').oninput = (e) => setSpeed(e.target.value);
+document.querySelectorAll('[data-sp]').forEach((b) => { b.onclick = () => setSpeed(b.dataset.sp); });
+let tlDrag = false;
+$('tl').addEventListener('pointerdown', () => { tlDrag = true; });
+window.addEventListener('pointerup', () => { tlDrag = false; });
+$('tl').addEventListener('input', (e) => { st.seek = uToT(Number(e.target.value)); });
+$('np').onchange = (e) => { const keep = st.t; rebuild(Number(e.target.value)); st.t = T0; st.seek = keep; toast('粒子数を変更しました'); };
+$('rot').onchange = (e) => { cam.rot = e.target.checked; };
+setSpeed(0); setDir(1);
+
+// ------------------------------------------------------------------ 描画
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.max(1, Math.floor(canvas.clientWidth * dpr)), h = Math.max(1, Math.floor(canvas.clientHeight * dpr));
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+  return dpr;
+}
+const ru = new Float32Array(28);
+function render(tReal, dpr) {
+  const a = cosmo.aOfT(st.t);
+  const aspect = canvas.width / canvas.height;
+  const eye = [cam.dist * Math.cos(cam.el) * Math.sin(cam.az), cam.dist * Math.sin(cam.el), cam.dist * Math.cos(cam.el) * Math.cos(cam.az)];
+  const vp = mul(perspective(0.9, aspect, 0.02, 40), lookAt(eye, [0, 0, 0], [0, 1, 0]));
+  const fade = smooth(A_REC, A_REC * 4, a);
+  const plasma = 1 - smooth(A_REC * 0.97, A_REC * 2.2, a);
+  const boxScale = Math.min(1.5, Math.max(0.25, Math.pow(a, 0.2)));
+  const expo = Math.pow(10, Number($('expo').value)) * Math.pow(262144 / N, 0.7);
+  ru.set(vp, 0);
+  ru.set([canvas.width, canvas.height, boxScale, 1.7 * dpr], 16);
+  ru.set([expo, $('dm').checked ? 1 : 0, Math.pow(cosmo.lum(st.t), 0.45), fade], 20);
+  ru.set([tReal, plasma, cosmo.TOfA(a), 0], 24);
+  device.queue.writeBuffer(renderUBuf, 0, ru);
+  if (st.densDirty) { submit((pass) => encodeDensity(pass)); st.densDirty = false; }
+  const enc = device.createCommandEncoder();
+  const pass = enc.beginRenderPass({ colorAttachments: [{ view: ctx.getCurrentTexture().createView(), clearValue: { r: 0, g: 0, b: 0.01, a: 1 }, loadOp: 'clear', storeOp: 'store' }] });
+  if (plasma > 0.002) { pass.setPipeline(plasmaPipe); pass.setBindGroup(0, renderBG); pass.draw(3); }
+  if (fade > 0.002) { pass.setPipeline(partPipe); pass.setBindGroup(0, renderBG); pass.draw(6, N); }
+  pass.end(); device.queue.submit([enc.finish()]);
+}
+function updateHud() {
+  const a = cosmo.aOfT(st.t), t = st.t;
+  $('era').textContent = eraOf(t, a);
+  $('age').textContent = fmtYears(t * 1e9);
+  const z = cosmo.zOfA(a);
+  $('zv').textContent = z > 100 ? z.toExponential(2).replace('e+', '×10^') : z.toFixed(z > 1 ? 2 : 3);
+  $('tv').innerHTML = fmtExp(cosmo.TOfA(a), ' K');
+  $('av').innerHTML = a < 0.01 || a > 1e4 ? fmtExp(a, '') : a.toFixed(a < 1 ? 3 : 2);
+  const m = st.limited ? 'GPU律速で速度を制限中' : st.seek !== null ? 'ジャンプ中…' : t < tS ? '線形成長(解析)' : t > tF ? '構造は凍結(膨張のみ)' : 'N体計算(重力)';
+  $('mode').textContent = m + (st.logMode ? '・対数時間' : '');
+  if (!tlDrag) $('tl').value = Math.round(tToU(t));
+}
+
+let last = performance.now(), t0Real = last;
+function frame(now) {
+  const dtReal = Math.min(0.1, (now - last) / 1000); last = now;
+  const dpr = resize();
+  if (cam.rot && ptrs.size === 0) cam.az += 0.03 * dtReal;
+  st.logMode = false;
+  if (st.seek !== null) {
+    simulate(st.seek - st.t, 14);
+    if (st.t === Math.min(Math.max(st.seek, T0), T_MAX)) st.seek = null;
+  } else if (st.dir !== 0) {
+    const lin = st.mult * RATE_1X * dtReal;
+    const lg = st.t * dtReal * 0.3 * Math.sqrt(Math.max(st.mult, 0.05));
+    st.logMode = lg > lin;
+    simulate(st.dir * Math.max(lin, lg), 3);
+    if ((st.dir > 0 && st.t >= T_MAX) || (st.dir < 0 && st.t <= T0)) setDir(0);
+  }
+  updateHud();
+  render((now - t0Real) / 1000, dpr);
+  requestAnimationFrame(frame);
+}
+
+try {
+  rebuild(np);
+} catch (e) { fatal('初期化に失敗しました: ' + e.message); throw e; }
+window.__cosmos = { st, cosmo, cam, simulate, rebuild: (n) => rebuild(n), device };
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
