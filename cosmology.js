@@ -10,7 +10,7 @@
     const Om = opts.Om !== undefined ? opts.Om : 0.31;
     const Or = opts.Or !== undefined ? opts.Or : 9.0e-5;
     const OL = 1 - Om - Or;
-    const TMAX = opts.tMax !== undefined ? opts.tMax : 200;
+    const TMAX = opts.tMax !== undefined ? opts.tMax : 1e91; // 1e100 年(ブラックホール蒸発の時代の終わり)
     const H0 = (100 * h) / 977.792; // 1/Gyr
     const T0 = 2.7255; // 現在のCMB温度 [K]
 
@@ -18,7 +18,7 @@
     const H = (a) => H0 * Math.sqrt(E2(a));
 
     // ---- t(a) 表(ln a 等間隔) ----
-    const LN0 = Math.log(1e-10), LN1 = Math.log(1e6), DL = 0.002;
+    const LN0 = Math.log(1e-10), LN1 = Math.log(1e30), DL = 0.002;
     const n = Math.round((LN1 - LN0) / DL) + 1;
     const tArr = new Float64Array(n);
     tArr[0] = 1e-20 / (2 * H0 * Math.sqrt(Or)); // 放射優勢: t = 1/(2H)
@@ -33,9 +33,19 @@
       const i = Math.floor(x), f = x - i;
       return tArr[i] * (1 - f) + tArr[i + 1] * f;
     }
+    // 十分未来(a>1e30)は ΛだけのドジッターDe Sitter空間: a ∝ exp(H_Λ t)。ln a を厳密に延長する。
+    const HL = H0 * Math.sqrt(OL), tEnd = tArr[n - 1];
+    const TdS = 1.054571817e-34 * (HL / 3.15576e16) / (2 * Math.PI * 1.380649e-23); // ドジッター温度[K]
+    function lnAOfT(t) {
+      if (t >= tEnd) return LN1 + HL * (t - tEnd);
+      return Math.log(aOfTTable(t));
+    }
     function aOfT(t) {
+      if (t >= tEnd) return Math.exp(Math.min(LN1 + HL * (t - tEnd), 700));
+      return aOfTTable(t);
+    }
+    function aOfTTable(t) {
       if (t <= tArr[0]) return 1e-10 * Math.sqrt(Math.max(t, 0) / tArr[0]);
-      if (t >= tArr[n - 1]) return Math.exp(LN1);
       let lo = 0, hi = n - 1;
       while (hi - lo > 1) {
         const mid = (lo + hi) >> 1;
@@ -77,7 +87,8 @@
         return 0.015 * Math.pow(opz, 2.7) / (1 + Math.pow(opz / 2.9, 5.6));
       };
       const w = (age) => Math.pow(1 + age / 0.1, -0.8) * Math.exp(-age / 1000);
-      for (let t = 0.004; t <= TMAX * 1.001; t *= 1.02) lumT.push(t);
+      const LUM_END = Math.min(TMAX, 400);
+      for (let t = 0.004; t <= LUM_END * 1.001; t *= 1.02) lumT.push(t);
       const ps = lumT.map((t) => sfr(aOfT(t)));
       let max = 0;
       for (let i = 0; i < lumT.length; i++) {
@@ -92,7 +103,10 @@
     })();
     function lum(t) {
       if (t <= lumT[0]) return 0;
-      if (t >= lumT[lumT.length - 1]) return lumV[lumV.length - 1];
+      if (t >= lumT[lumT.length - 1]) { // 星形成が尽きた後は、星が死んで暗くなっていく(減光時間 約1兆年)
+        const te = lumT[lumT.length - 1];
+        return lumV[lumV.length - 1] * Math.exp(-(t - te) / 1000);
+      }
       let lo = 0, hi = lumT.length - 1;
       while (hi - lo > 1) {
         const mid = (lo + hi) >> 1;
@@ -104,7 +118,7 @@
 
     return {
       h, Om, Or, OL, H0, TMAX,
-      H, tOfA, aOfT, D, f: fGrowth, lum,
+      H, tOfA, aOfT, lnAOfT, TdS, D, f: fGrowth, lum,
       zOfA: (a) => 1 / a - 1,
       TOfA: (a) => T0 / a,
       tMin: tArr[0],

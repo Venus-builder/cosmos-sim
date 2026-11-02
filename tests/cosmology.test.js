@@ -34,3 +34,17 @@ assert.ok(c.lum(200) < c.lum(c.tNow), '遠い未来は星の光が弱くなる')
 assert.strictEqual(c.lum(0.001), 0, '最初の星より前は 0');
 
 console.log('cosmology: all tests passed (age=%s Gyr, tRec=%s Myr)', c.tNow.toFixed(3), (tRec * 1000).toFixed(3));
+
+// ---- 遠い未来(ドジッター)への延長
+{
+  const C = Cosmology_create();
+  const hl = C.H0 * Math.sqrt(C.OL);
+  const l1 = C.lnAOfT(5000), l2 = C.lnAOfT(6000);
+  assert.ok(Math.abs((l2 - l1) - hl * 1000) < 1e-6, 'a ∝ exp(H_Λ t)');
+  assert.ok(C.lnAOfT(1e91) > 1e89 && Number.isFinite(C.lnAOfT(1e91)), '10^100 年でも有限');
+  assert.ok(Math.abs(Math.log(C.aOfT(500)) - C.lnAOfT(500)) < 1e-9, 'ln a の連続');
+  assert.ok(C.TdS > 1e-31 && C.TdS < 1e-29, 'ドジッター温度は約 2e-30 K');
+  assert.ok(C.lum(1e4) < C.lum(1e3) && C.lum(1e5) < 1e-6, '星の光は遠い未来に消える');
+  console.log('cosmology(far future): ok');
+}
+function Cosmology_create() { return require('../cosmology.js').create(); }
