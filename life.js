@@ -67,5 +67,56 @@
   const STATE_JP = { temperate: '温暖(液体の水が存在しうる)', frozen: '全球凍結', scorched: '高温(水は蒸発)', runaway: '暴走温室(金星型)', airless: '大気なし', dry: '薄い大気・乾燥', giant: 'ガス・氷の巨大惑星' };
   const STATE_COLOR = { temperate: '#3b82f6', frozen: '#94a3b8', scorched: '#f97316', runaway: '#ef4444', airless: '#475569', dry: '#a16207', giant: '#64748b' };
 
-  return { starLumAt, stateAt, tidalLockGyr, environment, STATE_JP, STATE_COLOR, TEQ };
+
+  // ------------------------------------------------------------------ 第3b〜3d: 生命の段階と生き物(確率モデル=仮説)
+  // 段階の遷移は「液体の水がある期間」だけ進むポアソン過程。待ち時間の平均は地球の実績(約45億年で知的生命)を目安にした。
+  const STAGE_JP = ['生命なし', '前生物化学', '単純な生命(微生物)', '酸素を出す光合成', '真核生物', '多細胞生物', '複雑な生態系(動物・植物)', '神経系・脳をもつ動物', '知的生命'];
+  const MEAN = [0.2, 0.3, 1.5, 1.0, 1.2, 0.4, 0.15, 0.35]; // Gyr(液体の水がある期間での平均待ち時間)
+  const mb = (a) => () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const cfg = { ease: 1 }; // 大きいほど生命が生まれにくい世界
+
+  function habToAge(windows, hab) { // 液体の水がある期間を hab[Gyr] 積算した時点の恒星の年齢
+    let acc = 0;
+    for (const [a, b] of windows) { if (acc + (b - a) >= hab) return a + (hab - acc); acc += b - a; }
+    return null;
+  }
+  function biosphere(p, star, ageNow, env, seed) {
+    if (p.life && p.real !== false && p.name === '地球') return { stage: 8, real: true, intelligent: true, extinct: false, times: [], ageNow };
+    if (p.type !== 'rock' || !env || !env.windows.length) return { stage: 0, extinct: false, times: [], ageNow, intelligent: false };
+    const r = mb(Math.floor(seed * 1000003) ^ 0x9e3779b1);
+    const times = []; let hab = 0;
+    for (let i = 0; i < MEAN.length; i++) { hab += -MEAN[i] * cfg.ease * Math.log(1 - r()); times.push(habToAge(env.windows, hab)); }
+    let stage = 0; for (let i = 0; i < times.length; i++) if (times[i] !== null && times[i] <= ageNow) stage = i + 1;
+    const extinct = stage > 0 && !env.nowLiquid; // 液体の水の期間が終わったら生命は絶える
+    return { stage: extinct ? 0 : stage, peak: stage, extinct, times, ageNow, intelligent: !extinct && stage >= 8 };
+  }
+  const SYL2 = ['ア', 'イ', 'ウ', 'エ', 'オ', 'カ', 'キ', 'ク', 'ケ', 'コ', 'サ', 'シ', 'ス', 'セ', 'タ', 'チ', 'テ', 'ト', 'ナ', 'ニ', 'ネ', 'ノ', 'ハ', 'ヒ', 'フ', 'ホ', 'マ', 'ミ', 'ム', 'メ', 'モ', 'ヤ', 'ユ', 'ヨ', 'ラ', 'リ', 'ル', 'ロ'];
+  // 生き物(種)を手続き生成する。実在の生物の再現ではなく、惑星の条件と乱数から作る。
+  function species(p, star, bio, seed) {
+    const r = mb(Math.floor(seed * 7919) ^ 0x1b873593), out = [];
+    const nm = () => { let s = ''; const n = 2 + Math.floor(r() * 2); for (let i = 0; i < n; i++) s += SYL2[Math.floor(r() * SYL2.length)]; return s; };
+    const g = p.g || 1, sz = Math.pow(1 / g, 0.4); // 重力が小さいと大きな体が作れる
+    const hsv = (h, sat, v) => { const f = (n) => { const k = (n + h * 6) % 6; return v - v * sat * Math.max(0, Math.min(k, 4 - k, 1)); }; return [f(5), f(3), f(1)]; };
+    // 光合成の色は恒星の色で変わる(冷たい星の下では黒っぽい植物になる、という仮説)
+    const T = star.T, plantHue = T < 3800 ? 0.78 : T < 5200 ? 0.2 : T < 6800 ? 0.3 : 0.12, plantV = T < 3800 ? 0.22 : 0.45;
+    const stage = bio.stage, atm = p.atm || p.kind === 'earthlike';
+    const add = (kind, label, habitat, n, base) => { for (let i = 0; i < n; i++) {
+      const hue = kind === 3 ? plantHue + (r() - 0.5) * 0.08 : r(), col = kind === 3 ? hsv(plantHue + (r() - 0.5) * 0.06, 0.55 + r() * 0.3, plantV + r() * 0.35) : hsv(hue, 0.15 + r() * 0.5, 0.3 + r() * 0.55);
+      const col2 = kind === 3 ? hsv(plantHue + 0.05 + r() * 0.1, 0.4 + r() * 0.4, plantV * 0.7 + r() * 0.3) : hsv((hue + 0.05 + r() * 0.2) % 1, 0.2 + r() * 0.5, 0.2 + r() * 0.6);
+      out.push({ kind, habitat, label, name: nm() + (kind === 3 ? (r() < 0.5 ? '樹' : '草') : kind === 2 ? '魚' : kind === 1 ? '鳥' : kind === 4 ? '人' : '獣'),
+        size: base * (0.5 + r() * 1.5) * (kind === 3 ? 1 : sz), legs: kind === 0 ? 2 + 2 * Math.floor(r() * 3) : kind === 3 ? Math.floor(r() * 3) : 0, col, col2, speed: 0.3 + r() * 1.2, abundance: 0.4 + r() });
+    } };
+    if (stage >= 5) add(2, '水中の生物', 'sea', 2 + Math.floor(r() * 3), 0.0006);
+    if (stage >= 6) {
+      add(3, '植物', 'land', 3 + Math.floor(r() * 3), 0.004);
+      add(0, '陸上の動物', 'land', 3 + Math.floor(r() * 4), 0.0011);
+      if (atm) add(1, '空を飛ぶ動物', 'air', 1 + Math.floor(r() * 3), 0.0005);
+    }
+    if (bio.intelligent) add(4, '知的生命', 'land', 1, 0.0017);
+    if (bio.real) { // 地球: 一般的な姿(特定の実在種ではない)
+      out.forEach((s) => { if (s.kind === 3) { s.col = hsv(0.27, 0.65, 0.38 + r() * 0.2); s.col2 = hsv(0.1, 0.5, 0.3); } });
+    }
+    return out;
+  }
+  return { starLumAt, stateAt, tidalLockGyr, environment, STATE_JP, STATE_COLOR, TEQ, biosphere, species, STAGE_JP, cfg };
 });

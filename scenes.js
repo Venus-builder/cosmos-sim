@@ -384,6 +384,155 @@ fn skyCol(rd: vec3f, Ls: vec3f, withDisk: bool) -> vec3f {
   col = pow(clamp(col, vec3f(0.0), vec3f(1.0)), vec3f(0.92));
   return vec4f(col, 1.0);
 }
+
+@group(0) @binding(1) var<storage, read> cr: array<vec4f>;
+struct CO { @builtin(position) p: vec4f, @location(0) uv: vec2f, @location(1) @interpolate(flat) kind: f32,
+            @location(2) @interpolate(flat) c1: vec4f, @location(3) @interpolate(flat) c2: vec4f, @location(4) @interpolate(flat) misc: vec4f };
+// cr(1体につき4つ): a=(x,z,大きさkm,種類) b=(色1,様式) c=(色2,位相) d=(向き,生息地0陸1水2空,高さkm,横幅比)
+@vertex fn vsC(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> CO {
+  let a = cr[ii * 4u]; let b = cr[ii * 4u + 1u]; let c = cr[ii * 4u + 2u]; let d = cr[ii * 4u + 3u];
+  var cs = array<vec2f, 6>(vec2f(-1.0, 0.0), vec2f(1.0, 0.0), vec2f(-1.0, 1.0), vec2f(-1.0, 1.0), vec2f(1.0, 0.0), vec2f(1.0, 1.0));
+  let cc = cs[vi];
+  let kind = i32(a.w + 0.5);
+  let q = a.xy - u.w.xy;
+  let ro = vec3f(0.0, u.u.w, 0.0);
+  let E0 = elevAt(u.w.xy, 5);
+  let h = macroH(a.xy);
+  let water = u.m.z > 0.5 && h < u.nb.w;
+  var vis = 1.0;
+  let hab = i32(d.y + 0.5);
+  if (hab == 0 && water) { vis = 0.0; }
+  if (hab == 1 && !water) { vis = 0.0; }
+  if (kind == 3 && macroM(a.xy) < 0.40) { vis = 0.0; }
+  let ql = length(q);
+  if (ql < 0.0015) { vis = 0.0; }
+  let vd = q / max(ql, 0.0001);
+  let right = vec3f(vd.y, 0.0, -vd.x);
+  let vel = vec2f(sin(d.x), cos(d.x));
+  var flip = select(-1.0, 1.0, dot(vel, vec2f(right.x, right.z)) >= 0.0);
+  let gy = gH(q, 5 - i32(clamp(log2(max(ql, 0.01) / 0.01) * 0.45, 0.0, 3.0))) - E0 + d.z;
+  let base = vec3f(q.x, gy, q.y);
+  let wpos = base + right * (cc.x * a.z * d.w) + vec3f(0.0, cc.y * a.z, 0.0);
+  if (vis > 0.5 && d.z < 0.001) {
+    let mid = base + vec3f(0.0, a.z * 0.6, 0.0);
+    for (var k = 1; k <= 6; k++) {
+      let pp = mix(ro, mid, vec3f(f32(k) / 7.0));
+      if (pp.y < gH(pp.xz, 3) - E0 - 0.004) { vis = 0.0; }
+    }
+  }
+  let v = wpos - ro;
+  let cz = dot(v, u.f.xyz); let cx = dot(v, u.r.xyz); let cy = dot(v, u.u.xyz);
+  if (cz < 0.0005) { vis = 0.0; }
+  var o: CO;
+  o.p = select(vec4f(3.0, 3.0, 3.0, 1.0), vec4f(cx / (u.f.w * u.r.w), cy / u.r.w, 0.5 * cz, cz), vis > 0.5);
+  o.uv = vec2f(cc.x * d.w * flip, cc.y);
+  o.kind = a.w; o.c1 = vec4f(b.xyz, b.w); o.c2 = vec4f(c.xyz, c.w); o.misc = vec4f(c.w, b.w, cz, 0.0);
+  return o;
+}
+fn sdE(p: vec2f, c: vec2f, r: vec2f) -> f32 { return (length((p - c) / r) - 1.0) * min(r.x, r.y); }
+fn sdCap(p: vec2f, a: vec2f, b: vec2f, r: f32) -> f32 { let pa = p - a; let ba = b - a; let h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0); return length(pa - ba * h) - r; }
+fn sdB(p: vec2f, c: vec2f, h: vec2f) -> f32 { let d = abs(p - c) - h; return length(max(d, vec2f(0.0))) + min(max(d.x, d.y), 0.0); }
+fn sdTri(p: vec2f, x0: f32, y0: f32, w: f32, hgt: f32) -> f32 { return max(abs(p.x - x0) - w * (1.0 - (p.y - y0) / hgt), max(y0 - p.y, p.y - (y0 + hgt))); }
+
+@fragment fn fsC(i: CO) -> @location(0) vec4f {
+  let p = i.uv; let ph = i.misc.x; let st = i.misc.y; let kind = i32(i.kind + 0.5);
+  let Ls = normalize(u.L.xyz);
+  let day = smoothstep(-0.12, 0.18, Ls.y);
+  var d = 1.0; var col = i.c1.rgb; var emis = vec3f(0.0);
+  if (kind == 0) {
+    d = sdE(p, vec2f(0.0, 0.52), vec2f(0.55, 0.2));
+    d = min(d, sdE(p, vec2f(0.66, 0.66), vec2f(0.2, 0.14)));
+    d = min(d, sdCap(p, vec2f(0.45, 0.58), vec2f(0.62, 0.64), 0.07));
+    d = min(d, sdCap(p, vec2f(-0.5, 0.56), vec2f(-0.92, 0.38 + 0.08 * sin(ph * 2.0)), 0.035));
+    let pairs = max(floor(st * 0.5), 1.0);
+    var dl = 1.0;
+    for (var k = 0; k < 6; k++) {
+      if (f32(k) >= st) { break; }
+      let pr = f32(k / 2);
+      let fx = mix(-0.38, 0.38, select(0.5, pr / max(pairs - 1.0, 1.0), pairs > 1.0));
+      let sw = 0.09 * sin(ph * 3.0 + f32(k) * 3.14159 + pr);
+      dl = min(dl, sdCap(p, vec2f(fx, 0.4), vec2f(fx + sw, 0.0), 0.04));
+    }
+    if (dl < d) { col = i.c2.rgb; }
+    if (p.x > 0.5 && p.y > 0.5) { col = mix(i.c1.rgb, i.c2.rgb, 0.5); }
+    d = min(d, dl);
+    if (length(p - vec2f(0.72, 0.7)) < 0.03) { col = vec3f(0.02); }
+  } else if (kind == 1) {
+    let f = sin(ph * 6.0);
+    d = sdE(p, vec2f(0.0, 0.5), vec2f(0.28, 0.12));
+    d = min(d, sdE(p, vec2f(0.3, 0.58), vec2f(0.07, 0.07)));
+    d = min(d, sdCap(p, vec2f(-0.28, 0.5), vec2f(-0.6, 0.45), 0.03));
+    let dw = min(sdCap(p, vec2f(-0.05, 0.58), vec2f(-0.45, 0.58 + 0.5 * f), 0.05), sdCap(p, vec2f(0.05, 0.58), vec2f(0.4, 0.58 + 0.5 * sin(ph * 6.0 + 0.6)), 0.05));
+    if (dw < d) { col = i.c2.rgb; }
+    d = min(d, dw);
+  } else if (kind == 2) {
+    d = sdE(p, vec2f(0.0, 0.5), vec2f(0.7, 0.22));
+    let dt = min(sdCap(p, vec2f(-0.62, 0.5), vec2f(-0.98, 0.78 + 0.06 * sin(ph * 5.0)), 0.05), sdCap(p, vec2f(-0.62, 0.5), vec2f(-0.98, 0.22 - 0.06 * sin(ph * 5.0)), 0.05));
+    let df = sdCap(p, vec2f(0.0, 0.7), vec2f(-0.2, 0.92), 0.04);
+    if (min(dt, df) < d) { col = i.c2.rgb; }
+    d = min(d, min(dt, df));
+    if (length(p - vec2f(0.5, 0.55)) < 0.04) { col = vec3f(0.02); }
+  } else if (kind == 3) {
+    let sw = 0.02 * sin(ph);
+    if (st < 0.5) {
+      d = sdCap(p, vec2f(0.0, 0.0), vec2f(sw, 0.5), 0.06);
+      var dc = sdE(p, vec2f(sw, 0.72), vec2f(0.5, 0.3));
+      dc = min(dc, sdE(p, vec2f(-0.3 + sw, 0.62), vec2f(0.3, 0.22)));
+      dc = min(dc, sdE(p, vec2f(0.32 + sw, 0.64), vec2f(0.3, 0.22)));
+      col = select(i.c2.rgb, i.c1.rgb * (0.75 + 0.5 * noise3(vec3f(p * 7.0, 1.0))), dc < d);
+      d = min(d, dc);
+    } else if (st < 1.5) {
+      d = sdCap(p, vec2f(0.0, 0.0), vec2f(0.0, 0.2), 0.05);
+      var dc = 1.0;
+      for (var l = 0; l < 4; l++) { let y0 = 0.15 + 0.2 * f32(l); dc = min(dc, sdTri(p, sw * f32(l) * 0.4, y0, 0.5 - 0.1 * f32(l), 0.4)); }
+      col = select(i.c2.rgb, i.c1.rgb * (0.75 + 0.5 * noise3(vec3f(p * 7.0, 2.0))), dc < d);
+      d = min(d, dc);
+    } else {
+      d = sdE(p, vec2f(-0.4 + sw, 0.25), vec2f(0.4, 0.25));
+      d = min(d, sdE(p, vec2f(0.3 + sw, 0.3), vec2f(0.45, 0.3)));
+      d = min(d, sdE(p, vec2f(sw, 0.4), vec2f(0.4, 0.35)));
+      col = i.c1.rgb * (0.7 + 0.6 * noise3(vec3f(p * 8.0, 3.0)));
+    }
+  } else if (kind == 4) {
+    let s = sin(ph * 3.0);
+    d = sdE(p, vec2f(0.0, 0.9), vec2f(0.09, 0.09));
+    var db = sdCap(p, vec2f(0.0, 0.78), vec2f(0.0, 0.45), 0.09);
+    let dg = min(sdCap(p, vec2f(0.0, 0.45), vec2f(0.1 * s, 0.0), 0.05), sdCap(p, vec2f(0.0, 0.45), vec2f(-0.1 * s, 0.0), 0.05));
+    let da = min(sdCap(p, vec2f(0.0, 0.74), vec2f(-0.12 * s, 0.5), 0.04), sdCap(p, vec2f(0.0, 0.74), vec2f(0.12 * s, 0.5), 0.04));
+    col = select(i.c1.rgb, i.c2.rgb, d < min(db, min(dg, da)));
+    d = min(d, min(db, min(dg, da)));
+  } else {
+    let lvl = i32(st + 0.5);
+    var win = 0.0;
+    if (lvl == 0) {
+      d = min(sdB(p, vec2f(0.0, 0.22), vec2f(0.38, 0.22)), sdTri(p, 0.0, 0.42, 0.55, 0.55));
+      col = select(i.c2.rgb, i.c1.rgb, p.y < 0.42);
+    } else if (lvl == 1) {
+      d = min(sdB(p, vec2f(0.0, 0.3), vec2f(0.55, 0.3)), sdTri(p, 0.0, 0.6, 0.66, 0.4));
+      col = select(i.c2.rgb, i.c1.rgb, p.y < 0.6);
+      win = step(0.5, fract(p.x * 4.0 + 0.5)) * step(0.35, p.y) * step(p.y, 0.5) * step(abs(p.x), 0.5);
+    } else if (lvl == 2) {
+      d = sdB(p, vec2f(0.0, 0.5), vec2f(0.2, 0.5));
+      col = i.c1.rgb * (0.85 + 0.15 * noise3(vec3f(p * 20.0, 4.0)));
+      win = step(0.45, fract(p.x * 6.0)) * step(0.45, fract(p.y * 14.0)) * step(abs(p.x), 0.16) * step(0.08, p.y) * step(p.y, 0.95);
+    } else {
+      d = sdB(p, vec2f(0.0, 0.5), vec2f(0.28, 0.5));
+      col = i.c1.rgb * (0.85 + 0.15 * noise3(vec3f(p * 20.0, 5.0)));
+      win = step(0.4, fract(p.x * 8.0)) * step(0.4, fract(p.y * 24.0)) * step(abs(p.x), 0.24) * step(0.06, p.y) * step(p.y, 0.94) * step(0.35, hash31(floor(vec3f(p.x * 8.0, p.y * 24.0, 3.0))));
+    }
+    emis = vec3f(1.0, 0.82, 0.45) * win * (1.0 - day) * 1.4;
+    col = mix(col, vec3f(0.2, 0.25, 0.3), win * day * 0.7);
+  }
+  let alpha = 1.0 - smoothstep(0.0, 0.025, d);
+  if (alpha <= 0.01) { discard; }
+  var lit = col * (0.1 + 0.9 * day * (0.55 + 0.45 * clamp(Ls.y * 1.5 + 0.2, 0.0, 1.0))) + emis;
+  let atmD = u.atm.w;
+  let fa = 1.0 - exp(-i.misc.z * (0.05 + select(0.0, 0.5, i32(u.w.w + 0.5) == 5)) * atmD);
+  let fogC = skyCol(vec3f(0.0, 0.02, 1.0), Ls, false);
+  lit = mix(lit, fogC, fa);
+  lit = pow(clamp(lit, vec3f(0.0), vec3f(1.0)), vec3f(0.92));
+  return vec4f(lit * alpha, alpha);
+}
 `;
 
 // ---------------------------------------------------------------- 本体
@@ -415,11 +564,16 @@ function create(env) {
   const sprPipe = device.createRenderPipeline({ layout: sprL.p, vertex: { module: sprMod, entryPoint: 'vs' }, fragment: { module: sprMod, entryPoint: 'fs', targets: [{ format, blend: premul }] } });
   const plPipe = device.createRenderPipeline({ layout: plL.p, vertex: { module: plMod, entryPoint: 'vs' }, fragment: { module: plMod, entryPoint: 'fs', targets: [{ format }] } });
   const surfPipe = device.createRenderPipeline({ layout: plL.p, vertex: { module: surfMod, entryPoint: 'vs' }, fragment: { module: surfMod, entryPoint: 'fs', targets: [{ format }] } });
+  const surfCL = mkLayout([{ binding: 0, visibility: V | F, buffer: { type: 'uniform' } }, { binding: 1, visibility: V, buffer: { type: 'read-only-storage' } }]);
+  const crPipe = device.createRenderPipeline({ layout: surfCL.p, vertex: { module: surfMod, entryPoint: 'vsC' }, fragment: { module: surfMod, entryPoint: 'fsC', targets: [{ format, blend: premul }] } });
   const U = GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, ST = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST;
   const galU = device.createBuffer({ size: 96, usage: U }), sprU = device.createBuffer({ size: 80, usage: U }), plU = device.createBuffer({ size: 192, usage: U });
   const plBG = device.createBindGroup({ layout: plL.b, entries: [{ binding: 0, resource: { buffer: plU } }] });
   const surfU = device.createBuffer({ size: 192, usage: U });
   const surfBG = device.createBindGroup({ layout: plL.b, entries: [{ binding: 0, resource: { buffer: surfU } }] });
+  const MAXC = 700, crBuf = device.createBuffer({ size: MAXC * 64, usage: ST });
+  const crBG = device.createBindGroup({ layout: surfCL.b, entries: [{ binding: 0, resource: { buffer: surfU } }, { binding: 1, resource: { buffer: crBuf } }] });
+  let crCount = 0;
   let galBufs = null, galBG = null, sprBuf = null, sprBG = null, sprCap = 0;
 
   const active = () => S.kind !== 'cosmos';
@@ -496,7 +650,10 @@ function create(env) {
   function enterSystem(sys, from) {
     S.sys = sys; S.kind = 'system'; S.clock = 0; S.pl = null;
     if (from && S.stack[S.stack.length - 1] !== from) S.stack.push(from);
-    sys.planets.forEach((p) => { if (!p.env) p.env = env.life.environment(p, sys.star, sys.star.age); });
+    sys.planets.forEach((p) => {
+      if (!p.env) p.env = env.life.environment(p, sys.star, sys.star.age);
+      if (!p.bio) p.bio = sys.real && p.name !== '地球' ? { stage: 0, real: true } : p.type === 'rock' ? env.life.biosphere(p, sys.star, sys.star.age, p.env, p.seed || 1) : null;
+    });
     S.orbit = sys.planets.map((p) => astro.orbitPoints(p, 140).map(compress));
     const sq = Math.sqrt(sys.star.L);
     S.hzPts = [0.95 * sq, 1.67 * sq].flatMap((rr) => Array.from({ length: 120 }, (_, k) => { const a = k / 120 * Math.PI * 2; return compress([rr * Math.cos(a), 0, rr * Math.sin(a)]); }));
@@ -545,6 +702,14 @@ function create(env) {
   }
 
   // ------------------------------------------------------------ 惑星
+  const greenOf = (p) => (p.life || (p.bio && p.bio.stage >= 6)) ? 1 : 0;
+  const bioText = (p) => {
+    const b = p.bio, SJ = env.life.STAGE_JP;
+    if (!b) return p.type === 'rock' ? '—' : '考えない(ガス・氷の巨大惑星)';
+    if (b.real) return p.name === '地球' ? '地球の生命(実際)' : '見つかっていない(実際)';
+    if (b.extinct) return '絶えた(かつて到達: ' + SJ[b.peak] + ')・確率モデル(仮説)';
+    return (b.stage ? SJ[b.stage] : '生命なし(液体の水が無い、または誕生に至らず)') + '・確率モデル(仮説)';
+  };
   const KIND_CODE = { earthlike: 0, gas: 1, icegiant: 1, lava: 2, frozen: 3, barren: 4, venus: 5, desert: 6 };
   function enterPlanet(i) {
     S.plIdx = i; S.pl = S.sys.planets[i]; S.kind = 'planet'; S.clock = 0; S.stack.push('system');
@@ -574,7 +739,7 @@ function create(env) {
     u.set([sea, 0, cloud, kind], 28);
     u.set([atmCol[0], atmCol[1], atmCol[2], atmCol[3]], 32);
     u.set([p.seed || 1, 8.4 - cam.dist * 1.2, p.tsurf || 280, 0], 36);
-    u.set([...(p.type === 'rock' ? [0, 0, 0] : p.tintA), p.life ? 1 : 0], 40);
+    u.set([...(p.type === 'rock' ? [0, 0, 0] : p.tintA), greenOf(p)], 40);
     u.set([...(p.tintB || [0, 0, 0]), 0], 44);
     device.queue.writeBuffer(plU, 0, u);
     S.pcam = { right, up, fwd, dist: cam.dist, asp: W / H, Wb, alpha };
@@ -651,7 +816,42 @@ function create(env) {
     S.sf = { s0, Eb: b.E, Nb: b.N, wx: 0, wz: 0, sel: 0, lat: b.lat, lon: b.lon, hd: 0 };
     Object.assign(cams.surface, { az: 0, el: 0.12, dist: 1 });
     clearLabels(); env.onEnter('surface');
-    env.toast(p.life ? '地球の地表です' : '地表に降り立ちました。この惑星の生命は未判定です(次の実装で追加予定)', 4800);
+    S.fauna = p.bio && p.bio.stage >= 5 ? env.life.species(p, S.sys.star, p.bio, (p.seed || 1) + 0.5) : [];
+    env.toast(p.name === '地球' ? '地球の地表です(生き物は手続き生成の姿で、実在の種そのものではありません)' : '地表に降り立ちました: ' + bioText(p), 5200);
+  }
+  // ---- 生き物と建物(地表のセルごとに、シードから決まる配置)
+  const hh = (a, b, c, d) => { let h = 2166136261 ^ (a | 0); h = Math.imul(h ^ (b | 0), 16777619); h = Math.imul(h ^ (c | 0), 0x85ebca6b); h = Math.imul(h ^ (d | 0), 0xc2b2ae35); h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d); h ^= h >>> 13; return (h >>> 0) / 4294967296; };
+  function civLevel() {
+    const p = S.pl, b = p.bio; if (!b || !b.intelligent) return 0;
+    const w = env.getCiv ? env.getCiv(S.sys.seed + ':' + p.name) : null;
+    if (w) { const m = w.ms; return (m.electric || m.computer) ? 4 : m.machine ? 3 : m.city ? 2 : m.agri ? 1 : 0; }
+    return b.real ? 4 : 0;
+  }
+  function buildCreatures(sf, tsec) {
+    const p = S.pl, F = S.fauna || [], by = (k) => F.filter((x) => x.kind === k), data = new Float32Array(MAXC * 16), list = [];
+    const plants = by(3), animals = by(0), birds = by(1), fish = by(2), people = by(4), lvl = S.civNow = civLevel();
+    const cell = 0.04, R = 7, seed = Math.floor((p.seed || 1) * 1000) | 0;
+    const ci0 = Math.floor(sf.wx / cell), cj0 = Math.floor(sf.wz / cell);
+    const add = (kind, x, z, size, sp, style, phase, head, hab, alt, wr, c1, c2) => (x - sf.wx) ** 2 + (z - sf.wz) ** 2 > 1.5e-4 && list.push({ d2: (x - sf.wx) ** 2 + (z - sf.wz) ** 2, v: [x, z, size, kind, c1[0], c1[1], c1[2], style, c2[0], c2[1], c2[2], phase, head, hab, alt, wr] });
+    const pick = (arr, r) => arr[Math.floor(r * arr.length) % arr.length];
+    for (let dj = -R; dj <= R; dj++) for (let di = -R; di <= R; di++) {
+      if (di * di + dj * dj > R * R) continue;
+      const ci = ci0 + di, cj = cj0 + dj, r = (k) => hh(seed, ci, cj, k), X = (k) => (ci + r(k)) * cell, Z = (k) => (cj + r(k + 50)) * cell;
+      if (plants.length && r(1) < 0.45) { const sp = pick(plants, r(2)); add(3, X(3), Z(3), sp.size * (0.7 + 0.6 * r(4)), sp, sp.legs, r(5) * 6.28 + tsec * 1.2, 0, 0, 0, [0.9, 0.9, 0.85][sp.legs] || 0.9, sp.col, sp.col2); }
+      if (animals.length && r(6) < 0.05) { const sp = pick(animals, r(7)), a = tsec * 0.25 * sp.speed + r(8) * 6.28; add(0, X(9) + 0.012 * Math.sin(a), Z(9) + 0.012 * Math.cos(a), sp.size, sp, sp.legs, tsec * sp.speed * 2 + r(10) * 6, Math.atan2(Math.cos(a), -Math.sin(a)), 0, 0, 1.4, sp.col, sp.col2); }
+      if (birds.length && r(11) < 0.03) { const sp = pick(birds, r(12)), a = tsec * 0.5 * sp.speed + r(13) * 6.28; add(1, X(14) + 0.03 * Math.sin(a), Z(14) + 0.03 * Math.cos(a), sp.size, sp, 0, tsec * sp.speed * 2 + r(15) * 6, Math.atan2(Math.cos(a), -Math.sin(a)), 2, 0.02 + 0.04 * r(16), 1.0, sp.col, sp.col2); }
+      if (fish.length && r(17) < 0.08) { const sp = pick(fish, r(18)), a = tsec * 0.2 * sp.speed + r(19) * 6.28; add(2, X(20) + 0.008 * Math.sin(a), Z(20) + 0.008 * Math.cos(a), sp.size, sp, 0, tsec * sp.speed * 2 + r(21) * 6, Math.atan2(Math.cos(a), -Math.sin(a)), 1, 0, 1.1, sp.col, sp.col2); }
+      if (people.length && lvl >= 0 && r(22) < (lvl ? 0.012 : 0.006)) { const sp = people[0], a = tsec * 0.1 + r(23) * 6.28; add(4, X(24) + 0.005 * Math.sin(a), Z(24) + 0.005 * Math.cos(a), sp.size, sp, 0, tsec * 3 + r(25) * 6, Math.atan2(Math.cos(a), -Math.sin(a)), 0, 0, 0.5, sp.col, sp.col2); }
+      if (lvl >= 1 && people.length) {
+        const wall = [[0.62, 0.5, 0.36], [0.72, 0.68, 0.6], [0.55, 0.58, 0.62], [0.7, 0.74, 0.78]], roof = [[0.42, 0.3, 0.16], [0.55, 0.25, 0.2], [0.3, 0.3, 0.32], [0.3, 0.35, 0.4]];
+        const tryS = (lv, prob, size, wr, k) => { if (lvl >= lv + 1 && r(k) < prob && Math.hypot(X(k + 1) - sf.wx, Z(k + 1) - sf.wz) > 0.06) add(5, X(k + 1), Z(k + 1), size * (0.8 + 0.4 * r(k + 2)), null, lv, 0, 0, 0, 0, wr, wall[lv], roof[lv]); };
+        tryS(0, lvl >= 2 ? 0.01 : 0.03, 0.0035, 1.0, 30); tryS(1, lvl >= 3 ? 0.02 : 0.015, 0.007, 1.2, 33); tryS(2, 0.012, 0.035, 0.5, 36); tryS(3, 0.01, 0.07, 0.6, 39);
+      }
+    }
+    list.sort((a, b) => b.d2 - a.d2);
+    crCount = Math.min(list.length, MAXC);
+    for (let i = 0; i < crCount; i++) data.set(list[i].v, i * 16);
+    device.queue.writeBuffer(crBuf, 0, data, 0, crCount * 16);
   }
   function surfaceFrame(dt, W, H) {
     const p = S.pl, sf = S.sf, cam = cams.surface, R = p.radiusE * 6371;
@@ -681,8 +881,9 @@ function create(env) {
     u.set([...f, W / H], 0); u.set([...r, 0.6 * cam.dist], 4); u.set([...up, 0.0018], 8); u.set([...Ls, S.clock], 12);
     u.set([...sf.s0, R], 16); u.set([...sf.Eb, relief], 20); u.set([...sf.Nb, hasWater ? sea : 0.35], 24);
     u.set([sf.wx, sf.wz, p.seed || 1, kind], 28); u.set(atm, 32); u.set([bb[0] / bm, bb[1] / bm, bb[2] / bm, half], 36);
-    u.set([p.tsurf || 280, p.life ? 1 : 0, hasWater, sea], 40); u.set([Math.abs(sf.s0[1]), 0, 0, 0], 44);
+    u.set([p.tsurf || 280, greenOf(p), hasWater, sea], 40); u.set([Math.abs(sf.s0[1]), 0, 0, 0], 44);
     device.queue.writeBuffer(surfU, 0, u);
+    buildCreatures(sf, performance.now() / 1000);
   }
 
   // ------------------------------------------------------------ 共通
@@ -733,13 +934,13 @@ function create(env) {
     if (S.kind === 'galaxy') {
       crumb.push('銀河');
       return { crumb, era: '星をタップすると、その恒星系へズームします', big: astro.TYPE_JP[g.type],
-        rows: [['ハロー質量(近似)', fmt(g.Mh, 1) + ' M☉'], ['星の総質量(近似)', fmt(g.Mstar, 1) + ' M☉'], ['半径', (g.R).toFixed(1) + ' kpc'], ['宇宙年齢', env.fmtYears(g.tNow * 1e9)], ['表示している星', g.n.toLocaleString() + ' 個(標本)'], ['生命・文明', '未判定(次の実装で追加予定)']] };
+        rows: [['ハロー質量(近似)', fmt(g.Mh, 1) + ' M☉'], ['星の総質量(近似)', fmt(g.Mstar, 1) + ' M☉'], ['半径', (g.R).toFixed(1) + ' kpc'], ['宇宙年齢', env.fmtYears(g.tNow * 1e9)], ['表示している星', g.n.toLocaleString() + ' 個(標本)'], ['生命・文明', '恒星系ごとに確率モデルで判定(仮説)']] };
     }
     if (S.kind === 'system') {
       crumb.push('銀河', '恒星系'); const s = sys.star;
       return { crumb: sys.real ? ['宇宙', '太陽系'] : crumb, era: sys.real ? '実データ(NASA等の値): 惑星をタップ' : '法則+乱数で生成した恒星系: 惑星をタップ', big: sys.name,
         rows: [['恒星', s.spec + '型 ' + Math.round(s.T) + ' K'], ['質量', s.mass.toFixed(2) + ' M☉'], ['光度', fmt(s.L, 2) + ' L☉'], ['年齢/寿命', s.age.toFixed(1) + ' / ' + (s.life > 1e4 ? '>10兆' : s.life.toFixed(1)) + ' Gyr'],
-          ['金属量 Z', sys.Z.toFixed(2) + ' Z☉'], ['惑星の数', sys.planets.length + ' 個'], ['ハビタブルゾーン', sys.hz[0].toFixed(2) + '–' + sys.hz[1].toFixed(2) + ' AU'], ['生命', sys.real ? '地球のみ実在。他は未判定(次の実装で追加予定)' : '未判定(次の実装で追加予定)']] };
+          ['金属量 Z', sys.Z.toFixed(2) + ' Z☉'], ['惑星の数', sys.planets.length + ' 個'], ['ハビタブルゾーン', sys.hz[0].toFixed(2) + '–' + sys.hz[1].toFixed(2) + ' AU'], ['生命のいる惑星', sys.real ? '地球(実際)' : sys.planets.filter((q) => q.bio && q.bio.stage >= 2).length + ' 個(確率モデル・仮説)']] };
     }
     if (S.kind === 'surface') {
       const sf = S.sf, sel = Math.round(sf.sel), dn = sel > 6 ? '昼' : sel > -6 ? '朝夕(日の出・日の入り)' : '夜';
@@ -747,14 +948,14 @@ function create(env) {
         big: p.name + 'の地表',
         rows: [['太陽の高さ', sel + '°(' + dn + ')'], ['緯度・経度', (sf.lat * 180 / Math.PI).toFixed(1) + '° / ' + (sf.lon * 180 / Math.PI).toFixed(1) + '°'], ['表面重力', p.g.toFixed(2) + ' g'],
           ['気温(推定の平均)', Math.round(p.tsurf - 273.15) + ' ℃'], ['大気', p.atm ? (p.kind === 'venus' ? '厚い(地表は灼熱)' : 'あり') : 'なし(空は黒く、星が昼でも見える)'],
-          ['生命', p.life ? '地球の生命(実際。この地表の生き物の描画は未実装)' : '未判定(次の実装で追加予定)'], ['歩いた距離', Math.hypot(sf.wx, sf.wz).toFixed(2) + ' km']] };
+          ['生命', bioText(p)], ['見える生き物', S.fauna.length ? S.fauna.length + ' 種(手続き生成): ' + S.fauna.slice(0, 5).map((x) => x.name).join('・') + (S.fauna.length > 5 ? '…' : '') : 'いない(微生物以下は目に見えない)'], ...(S.civNow ? [['文明の段階', ['なし', '集落(小屋)', '街', '塔・工場', '電灯のともる都市'][S.civNow]]] : []), ['歩いた距離', Math.hypot(sf.wx, sf.wz).toFixed(2) + ' km']] };
     }
     crumb.push('銀河', '恒星系', p.name);
     return { crumb: sys.real ? ['宇宙', '太陽系', p.name] : crumb, era: (KIND_JP[p.kind] || '') + (p.habitable ? ' ★' : ''), big: p.name,
       rows: [['軌道長半径', p.a.toFixed(3) + ' AU(周期 ' + (p.period < 1 ? (p.period * 365.25).toFixed(1) + ' 日' : p.period.toFixed(2) + ' 年') + ')'], ['質量 / 半径', p.massE.toFixed(2) + ' / ' + p.radiusE.toFixed(2) + ' (地球=1)'],
         ['表面重力', p.g.toFixed(2) + ' g'], ['脱出速度', p.vesc.toFixed(1) + ' km/s'], ['平衡温度', Math.round(p.teq) + ' K'], ['表面温度(推定)', Math.round(p.tsurf) + ' K(' + Math.round(p.tsurf - 273.15) + ' ℃)'],
         ['大気', p.atm ? (p.type === 'rock' ? 'あり' : '厚い(水素・ヘリウム主体)') : 'なし(軽いガスは逃げる)'], ['自転', (p.rotH < 100 ? p.rotH.toFixed(1) + ' 時間' : (p.rotH / 24).toFixed(0) + ' 日') + '、傾き ' + p.tilt.toFixed(0) + '°'],
-        ['生命', p.life ? '地球の生命(実際)' : '未判定(次の実装で追加予定)'], ...envRows(p, sys)] };
+        ['生命', bioText(p)], ...envRows(p, sys)] };
   }
 
   function frame(dtReal, dpr) {
@@ -785,6 +986,7 @@ function create(env) {
       planetFrame(dtReal, W, H); // 惑星の自転と太陽の向きの更新(軌道の絵は描かない)
       surfaceFrame(dtReal, W, H);
       pass.setPipeline(surfPipe); pass.setBindGroup(0, surfBG); pass.draw(3);
+      if (crCount) { pass.setPipeline(crPipe); pass.setBindGroup(0, crBG); pass.draw(6, crCount); }
     }
     pass.end(); device.queue.submit([enc.finish()]);
     env.setInfo(info());
@@ -794,6 +996,8 @@ function create(env) {
     get kind() { return S.kind; }, active, curCam, enterGalaxy, enterSun, back, onTap, frame, speedText,
     canBack: () => S.stack.length > 0, enterPlanet, labelsRef: () => S.labels,
     getSystem: () => S.sys, planetIndex: () => S.plIdx, land: () => land(null), setWalk: (v) => { S.walk = v; },
+    dbg: () => ({ crCount, fauna: (S.fauna||[]).map((x) => x.kind + ':' + x.size.toFixed(4)).join(' '), h: terrainH(S.sf.s0, S.pl.seed || 1), sea: 0.3 + 0.4 * (S.pl.water || 0), seed: S.pl.seed, kind: S.pl.kind, s0: S.sf.s0 }),
+    civTarget: () => (S.pl && S.pl.bio && S.pl.bio.intelligent && S.sys ? { key: S.sys.seed + ':' + S.pl.name, name: S.pl.name, real: !!S.pl.bio.real, seed: Math.floor((S.pl.seed || 1) * 1000) } : null),
     cosmosReturn: () => { S.kind = 'cosmos'; S.stack = []; clearLabels(); },
   };
 }

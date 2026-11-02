@@ -45,3 +45,28 @@ for (let i = 0; i < 100; i++) {
   }
 }
 console.log('life: all tests passed (Earth window ends at %s Gyr)', env.windowEnd.toFixed(2));
+
+// ---- 生命の段階と生き物
+{
+  const sol2 = A.solarSystem(), ea = sol2.planets.find((x) => x.name === '地球');
+  ea.env = Life.environment(ea, sol2.star, 4.6);
+  const bE = Life.biosphere(ea, sol2.star, 4.6, ea.env, 1);
+  assert.ok(bE.real && bE.intelligent && bE.stage === 8, '地球には知的生命がいる(実際)');
+  const spE = Life.species(ea, sol2.star, bE, 5);
+  assert.ok(spE.some((x) => x.kind === 4) && spE.some((x) => x.kind === 3), '地球の生き物に人と植物がいる');
+  const dist = new Array(9).fill(0); let tested = 0;
+  for (let i = 0; i < 300; i++) {
+    const sys = A.makeSystem({ seed: 1000 + i, mass: 1, Z: 1, age: 4.5 });
+    for (const p of sys.planets) {
+      if (p.type !== 'rock') continue;
+      p.env = Life.environment(p, sys.star, sys.star.age);
+      const b = Life.biosphere(p, sys.star, sys.star.age, p.env, p.seed);
+      assert.deepStrictEqual(b, Life.biosphere(p, sys.star, sys.star.age, p.env, p.seed), '同じシードなら同じ結果');
+      dist[b.stage]++; tested++;
+      Life.species(p, sys.star, b, p.seed).forEach((x) => assert.ok(Number.isFinite(x.size) && x.col.every(Number.isFinite)));
+    }
+  }
+  assert.ok(tested > 100, 'テスト対象の惑星が十分ある');
+  assert.ok(dist[0] > dist[8], '知的生命は稀(生命なしの惑星のほうが多い): ' + dist.join(','));
+  console.log('life(biosphere): stages', dist.join(','), 'of', tested);
+}

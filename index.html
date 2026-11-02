@@ -52,6 +52,16 @@
     padding: 24px; text-align: center; line-height: 1.8; }
   #fatal.show { display: flex; }
   .lbl { }
+  #bUI { position: fixed; right: 8px; top: 50%; z-index: 30; width: 38px; height: 38px; padding: 0; border-radius: 50%; opacity: .55; font-size: 18px; }
+  #bUI:hover { opacity: 1; }
+  body.hideui #info, body.hideui #opts, body.hideui #bar, body.hideui #civ, body.hideui #markers { display: none !important; }
+  #civ { right: 16px; top: 64px; width: 320px; max-height: calc(100dvh - 300px); overflow-y: auto; font-size: 12px; line-height: 1.5; }
+  #civ .bars div { display: grid; grid-template-columns: 7.5em 1fr 2.6em; align-items: center; gap: 6px; }
+  #civ .bars i { display: block; height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+  #civ .tl { max-height: 150px; overflow-y: auto; margin-top: 6px; border-top: 1px solid var(--line); padding-top: 4px; }
+  #civ .ms { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+  #civ .ms span { border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; font-size: 11px; color: var(--dim); }
+  #civ .ms span.on { color: #02030a; background: var(--accent2); border-color: var(--accent2); }
   #uni { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
   #uni .row { margin-top: 6px; }
   #uni input[type=text] { width: 110px; background: rgba(0,0,0,.35); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; font: inherit; font-size: 12px; }
@@ -81,6 +91,8 @@
     #presets { display: none; }
     #note { display: none; }
     #toast { top: auto; bottom: 230px; max-width: 90vw; text-align: center; }
+    #civ { left: 8px; right: 8px; top: auto; bottom: 215px; width: auto; max-height: 34vh; }
+    #bUI { top: 46%; }
   }
 </style>
 </head>
@@ -130,6 +142,7 @@
     <button id="bBig" title="ビッグバンに戻す">⏮</button>
     <button id="bZoom" title="銀河にズーム">🔭<span class="lbl"> ズーム</span></button>
     <button id="bLand" title="この惑星の地表に降りる" style="display:none">⬇<span class="lbl"> 着陸</span></button>
+    <button id="bCiv" title="文明の実験" style="display:none">🏛<span class="lbl"> 文明</span></button>
     <button id="bWalk" title="押している間、前に進む(PCは W/↑ キー)" style="display:none">🚶<span class="lbl"> 前進</span></button>
     <button id="bRev" title="逆再生">◀<span class="lbl"> 逆再生</span></button>
     <button id="bPause" title="一時停止">⏸</button>
@@ -149,15 +162,24 @@
   <div id="note">N体計算はダークマターの粒子で行っています(星・惑星・生命は次の段階)。光の強さは星形成史にもとづく近似です。ドラッグで回転、ホイール/ピンチで拡大縮小。🔭ズームで銀河→星→惑星→地表へ。水色の枠は計算している箱の端です(宇宙の端ではありません。枠の外にも同じ宇宙が続くと仮定した周期境界)。星・惑星の姿は法則+乱数で生成した仮の姿です(太陽系のみ実データ)。</div>
 </div>
 
+<button id="bUI" title="画面の表示/非表示(Hキー)">👁</button>
+<div id="civ" class="panel" style="display:none">
+  <div class="row" style="justify-content:space-between"><b>🏛 文明の実験(仮説)</b><button class="small" id="civX">✕</button></div>
+  <div style="color:var(--dim);font-size:11px">知的生命の小さな集団から、個人どうしが技術を組み合わせて試す世界を動かします。順番・時期・中身は世界ごとの乱数で決まり、筋書きはありません(「計算機」などの名前は、能力の水準から後付け)。実際の人類史でも未来の予測でもありません。</div>
+  <div class="row"><button class="small" id="civGo">▶ 新しい世界で始める</button><button class="small" id="civPause">⏸</button>
+    <select id="civSpeed"><option value="100">100年/秒</option><option value="1000" selected>1000年/秒</option><option value="10000">1万年/秒</option><option value="100000">10万年/秒</option></select></div>
+  <div id="civBody"></div>
+</div>
 <div id="markers"></div>
 <div id="fade"></div>
 <div id="toast"></div>
 <div id="fatal"><div id="fatalMsg"></div></div>
 
-<script src="cosmology.js"></script>
-<script src="astro.js"></script>
-<script src="life.js"></script>
-<script src="scenes.js"></script>
+<script src="cosmology.js?v=10"></script>
+<script src="astro.js?v=10"></script>
+<script src="life.js?v=10"></script>
+<script src="civ.js?v=10"></script>
+<script src="scenes.js?v=10"></script>
 <script>
 (async function () {
 'use strict';
@@ -920,6 +942,7 @@ function clearHaloMarks() { haloMarks.forEach((m) => m.el.remove()); haloMarks =
 function setEventsVisible(v) { $('events').style.display = v ? '' : 'none'; $('tl').style.display = v ? '' : 'none'; }
 scenes = Scenes.create({
   device, ctx, canvas, format, astro: Astro, life: Life, cosmo, coarse, toast, fmtYears,
+  getCiv: (key) => (civ && civKey === key ? civ : null),
   getDir: () => st.dir, getMult: () => st.mult, getExpo: () => Math.pow(10, Number($('expo').value)),
   ui: { markers: $('markers') },
   setInfo(o) {
@@ -933,6 +956,8 @@ scenes = Scenes.create({
     lastInfo = '';
     $('bLand').style.display = kind === 'planet' ? '' : 'none';
     $('bWalk').style.display = kind === 'surface' ? '' : 'none';
+    $('bCiv').style.display = kind === 'surface' && scenes.civTarget() ? '' : 'none';
+    if (kind !== 'surface') $('civ').style.display = 'none';
     if (kind === 'cosmos') { $('dl').style.display = ''; $('dl2').style.display = 'none'; $('bBack').style.display = 'none'; $('bZoom').style.display = ''; setEventsVisible(true); setDir(savedDir); }
     else { $('bBack').style.display = ''; $('bZoom').style.display = 'none'; setEventsVisible(false); if (st.dir === 0) setDir(1); clearHaloMarks(); }
     setSpeed($('speed').value);
@@ -942,6 +967,37 @@ $('bLand').onclick = () => scenes.land();
 {
   const w = $('bWalk'), on = (v) => (e) => { e.preventDefault(); scenes.setWalk(v); };
   w.addEventListener('pointerdown', on(1)); w.addEventListener('pointerup', on(0)); w.addEventListener('pointerleave', on(0)); w.addEventListener('pointercancel', on(0));
+}
+// ------------------------------------------------------------------ 文明の実験(civ.js)
+let civ = null, civKey = null, civRunning = true, civRuns = 0, civMsSeen = 0, civSeedNo = 0, civPaint = 0;
+const fmtPop = (x) => (x >= 1e8 ? (x / 1e8).toFixed(2) + '億' : x >= 1e4 ? (x / 1e4).toFixed(1) + '万' : Math.round(x).toString());
+$('bCiv').onclick = () => { const v = $('civ').style.display === 'none'; $('civ').style.display = v ? '' : 'none'; if (v) paintCiv(true); };
+$('civX').onclick = () => { $('civ').style.display = 'none'; };
+$('civPause').onclick = () => { civRunning = !civRunning; $('civPause').textContent = civRunning ? '⏸' : '▶'; };
+$('civGo').onclick = () => {
+  const t = scenes.civTarget(); if (!t) return;
+  civRuns++; civSeedNo = (Math.imul(SEED, 2654435761) ^ Math.imul(t.seed + 1, 40503) ^ civRuns * 7919) >>> 0;
+  civ = Civ.create({ seed: civSeedNo }); civKey = t.key; civMsSeen = 0; civRunning = true; $('civPause').textContent = '⏸';
+  logVisit('文明の実験 #' + civSeedNo + '(' + t.name + ')'); paintCiv(true);
+};
+function civTick(dt) {
+  if (!civ || !civRunning || civ.ended) return;
+  let left = Number($('civSpeed').value) * dt; const t0 = performance.now();
+  while (left > 0.01 && performance.now() - t0 < 8 && !civ.ended) { const d = Math.min(civ.stepSize(), left); civ.step(d); left -= d; }
+  const names = Object.keys(civ.ms);
+  if (names.length > civMsSeen) { for (const k of names.slice(civMsSeen)) { const m = Civ.MILESTONES.find((x) => x.key === k); logVisit('文明#' + civSeedNo + ': ' + m.jp + ' ' + fmtYears(civ.ms[k])); } civMsSeen = names.length; }
+  if (performance.now() - civPaint > 250) paintCiv();
+}
+function paintCiv(force) {
+  civPaint = performance.now();
+  if ($('civ').style.display === 'none') return;
+  const body = $('civBody');
+  if (!civ) { body.innerHTML = '<div style="margin-top:6px">「新しい世界で始める」を押すと、エネルギー・材料・情報など7種類の能力をもつ技術を、個人が試行錯誤で作っていく様子を観察できます。始めるたびに別の世界になります。</div>'; return; }
+  const s = civ.summary(), caps = s.caps;
+  const bars = Civ.DIM_JP.map((n, i) => '<div><span>' + n + '</span><span style="background:rgba(127,166,255,.12);border-radius:3px"><i style="width:' + Math.min(100, caps[i] / 16 * 100).toFixed(1) + '%"></i></span><span style="text-align:right">' + caps[i].toFixed(1) + '</span></div>').join('');
+  const ms = Civ.MILESTONES.map((m) => '<span class="' + (s.ms[m.key] !== undefined ? 'on' : '') + '" title="' + (s.ms[m.key] !== undefined ? fmtYears(s.ms[m.key]) : '未到達') + '">' + m.jp.split('(')[0] + '</span>').join('');
+  const tl = civ.timeline.slice(-14).reverse().map((e) => '<div>' + fmtYears(e.year) + ' ' + e.text + '</div>').join('');
+  body.innerHTML = '<div style="margin-top:6px">世界のシード <b>' + civSeedNo + '</b> ・ ' + fmtYears(s.year) + '経過 ・ 人口 ' + fmtPop(s.pop) + ' ・ 技術 ' + s.items + '(作られた総数 ' + s.total + ')' + (s.ended ? ' <b style="color:#f87171">途絶えた</b>' : '') + '</div><div class="bars" style="margin-top:6px">' + bars + '</div><div class="ms">' + ms + '</div><div class="tl">' + tl + '</div>';
 }
 function enterScene(fn) { savedDir = st.dir; fadeTo(fn); }
 function scenesOnEnterCosmos() {
@@ -1009,6 +1065,8 @@ function placeHaloMarks(vp, boxScale) {
   }
 }
 setSpeed(0); setDir(1);
+$('bUI').onclick = () => document.body.classList.toggle('hideui');
+window.addEventListener('keydown', (e) => { if (e.key === 'h' && !/INPUT|TEXTAREA|SELECT/.test((e.target || {}).tagName || '')) document.body.classList.toggle('hideui'); });
 
 // ------------------------------------------------------------------ 描画
 function resize() {
@@ -1062,7 +1120,7 @@ let last = performance.now(), t0Real = last;
 function frame(now) {
   const dtReal = Math.min(0.1, (now - last) / 1000); last = now;
   const dpr = resize();
-  if (scenes.active()) { st.logMode = false; scenes.frame(dtReal, dpr); requestAnimationFrame(frame); return; }
+  if (scenes.active()) { st.logMode = false; civTick(dtReal); scenes.frame(dtReal, dpr); requestAnimationFrame(frame); return; }
   if (cam.rot && ptrs.size === 0) cam.az += 0.03 * dtReal;
   st.logMode = false;
   if (st.seek !== null) {
