@@ -38,6 +38,12 @@
   #tl { flex: 1; width: 100%; }
   #events { gap: 6px; }
   #note { font-size: 11px; color: var(--dim); line-height: 1.5; }
+  #markers { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+  .mk { position: absolute; left: 0; top: 0; pointer-events: auto; background: rgba(8,12,28,.78); border: 1px solid var(--accent);
+    color: var(--fg); border-radius: 999px; padding: 4px 10px; font-size: 12px; min-height: 0 !important; white-space: nowrap; }
+  .mk.pl { border-color: var(--accent2); }
+  #fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity .22s; }
+  #fade.on { opacity: 1; }
   #toast { position: fixed; left: 50%; top: 18px; transform: translateX(-50%); background: var(--panel);
     border: 1px solid var(--line); border-radius: 999px; padding: 6px 16px; font-size: 13px; opacity: 0;
     transition: opacity .25s; pointer-events: none; }
@@ -76,7 +82,8 @@
 <div id="info" class="panel">
   <div id="era"></div>
   <div id="age"></div>
-  <dl>
+  <dl id="dl2" style="display:none"></dl>
+  <dl id="dl">
     <dt>赤方偏移 z</dt><dd id="zv"></dd>
     <dt>温度(CMB)</dt><dd id="tv"></dd>
     <dt>宇宙の大きさ(現在=1)</dt><dd id="av"></dd>
@@ -100,7 +107,9 @@
 
 <div id="bar" class="panel">
   <div class="row transport">
+    <button id="bBack" title="ひとつ戻る" style="display:none">↩<span class="lbl"> 戻る</span></button>
     <button id="bBig" title="ビッグバンに戻す">⏮</button>
+    <button id="bZoom" title="銀河にズーム">🔭<span class="lbl"> ズーム</span></button>
     <button id="bRev" title="逆再生">◀<span class="lbl"> 逆再生</span></button>
     <button id="bPause" title="一時停止">⏸</button>
     <button id="bPlay" title="再生">▶<span class="lbl"> 再生</span></button>
@@ -116,13 +125,17 @@
   </div>
   <input type="range" id="tl" min="0" max="1000" step="1" value="0" title="時間軸(ドラッグでジャンプ)">
   <div class="row" id="events"></div>
-  <div id="note">N体計算はダークマターの粒子で行っています(星・惑星・生命は次の段階)。光の強さは星形成史にもとづく近似です。ドラッグで回転、ホイールで拡大縮小。</div>
+  <div id="note">N体計算はダークマターの粒子で行っています(星・惑星・生命は次の段階)。光の強さは星形成史にもとづく近似です。ドラッグで回転、ホイール/ピンチで拡大縮小。🔭ズームで銀河→星→惑星へ。星・惑星の姿は法則+乱数で生成した仮の姿です(太陽系のみ実データ)。</div>
 </div>
 
+<div id="markers"></div>
+<div id="fade"></div>
 <div id="toast"></div>
 <div id="fatal"><div id="fatalMsg"></div></div>
 
 <script src="cosmology.js"></script>
+<script src="astro.js"></script>
+<script src="scenes.js"></script>
 <script>
 (async function () {
 'use strict';
@@ -611,7 +624,7 @@ function rebuild(newNp) {
     psi: device.createBuffer({ size: N * 16, usage: S | D }),
     grid: device.createBuffer({ size: G3 * 4, usage: S }),
     cplx: device.createBuffer({ size: 4 * G3 * 8, usage: S }),
-    densF: device.createBuffer({ size: G3 * 4, usage: S }),
+    densF: device.createBuffer({ size: G3 * 4, usage: S | GPUBufferUsage.COPY_SRC }),
   };
   if (!psiGrids) psiGrids = generatePsiGrids(SEED);
   device.queue.writeBuffer(bufs.psi, 0, psiForParticles(psiGrids, np));
@@ -726,16 +739,25 @@ function mul(a, b) {
   return o;
 }
 const ptrs = new Map(); let pinch0 = 0;
-canvas.addEventListener('pointerdown', (e) => { canvas.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, [e.clientX, e.clientY]); if (ptrs.size === 2) { const [p, q] = [...ptrs.values()]; pinch0 = Math.hypot(p[0] - q[0], p[1] - q[1]); } });
+let scenes = null;
+const activeCam = () => (scenes && scenes.active() ? scenes.curCam() : cam);
+const clampDist = (c, d) => Math.min(c.max || 8, Math.max(c.min || 0.15, d));
+let tapInfo = null;
+canvas.addEventListener('pointerdown', (e) => { canvas.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, [e.clientX, e.clientY]); tapInfo = ptrs.size === 1 ? { x: e.clientX, y: e.clientY, t: performance.now(), moved: 0 } : null; if (ptrs.size === 2) { const [p, q] = [...ptrs.values()]; pinch0 = Math.hypot(p[0] - q[0], p[1] - q[1]); } });
 canvas.addEventListener('pointermove', (e) => {
   if (!ptrs.has(e.pointerId)) return;
   const prev = ptrs.get(e.pointerId); ptrs.set(e.pointerId, [e.clientX, e.clientY]);
-  if (ptrs.size === 1) { cam.az -= (e.clientX - prev[0]) * 0.005; cam.el = Math.max(-1.5, Math.min(1.5, cam.el + (e.clientY - prev[1]) * 0.005)); }
-  else if (ptrs.size === 2) { const [p, q] = [...ptrs.values()]; const d = Math.hypot(p[0] - q[0], p[1] - q[1]); if (pinch0 > 0) cam.dist = Math.min(8, Math.max(0.15, cam.dist * pinch0 / d)); pinch0 = d; }
+  const c = activeCam();
+  if (tapInfo) tapInfo.moved += Math.abs(e.clientX - prev[0]) + Math.abs(e.clientY - prev[1]);
+  if (ptrs.size === 1) { const k = c.min > 1 ? 0.0025 * Math.min(2, Math.max(0.3, c.dist - 1)) : 0.005; c.az -= (e.clientX - prev[0]) * k; c.el = Math.max(-1.5, Math.min(1.5, c.el + (e.clientY - prev[1]) * k)); }
+  else if (ptrs.size === 2) { const [p, q] = [...ptrs.values()]; const d = Math.hypot(p[0] - q[0], p[1] - q[1]); if (pinch0 > 0) c.dist = clampDist(c, c.dist * pinch0 / d); pinch0 = d; }
 });
-const upPtr = (e) => { ptrs.delete(e.pointerId); pinch0 = 0; };
-canvas.addEventListener('pointerup', upPtr); canvas.addEventListener('pointercancel', upPtr);
-canvas.addEventListener('wheel', (e) => { e.preventDefault(); cam.dist = Math.min(8, Math.max(0.15, cam.dist * Math.exp(e.deltaY * 0.001))); }, { passive: false });
+const upPtr = (e) => {
+  if (tapInfo && ptrs.size === 1 && tapInfo.moved < 8 && performance.now() - tapInfo.t < 400 && scenes && scenes.active()) scenes.onTap(e.clientX, e.clientY);
+  tapInfo = null; ptrs.delete(e.pointerId); pinch0 = 0;
+};
+canvas.addEventListener('pointerup', upPtr); canvas.addEventListener('pointercancel', (e) => { tapInfo = null; ptrs.delete(e.pointerId); pinch0 = 0; });
+canvas.addEventListener('wheel', (e) => { e.preventDefault(); const c = activeCam(); c.dist = clampDist(c, c.dist * Math.exp(e.deltaY * 0.001)); }, { passive: false });
 
 // ------------------------------------------------------------------ UI
 const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -759,7 +781,9 @@ $('bBig').onclick = () => { st.seek = T0; };
 function setSpeed(v) {
   $('speed').value = v; st.mult = Math.pow(10, Number(v));
   const mult = st.mult;
-  $('speedLbl').textContent = '×' + (mult >= 100 ? mult.toFixed(0) : mult >= 10 ? mult.toFixed(1) : mult.toFixed(2)) + '(1秒 = ' + fmtYears(mult * RATE_1X * 1e9) + ')' + (mult === 1 ? '〔1分=1億年〕' : '');
+  const mt = '×' + (mult >= 100 ? mult.toFixed(0) : mult >= 10 ? mult.toFixed(1) : mult.toFixed(2));
+  if (scenes && scenes.active()) { $('speedLbl').textContent = mt + '(' + scenes.speedText(mult) + ')'; return; }
+  $('speedLbl').textContent = mt + '(1秒 = ' + fmtYears(mult * RATE_1X * 1e9) + ')' + (mult === 1 ? '〔1分=1億年〕' : '');
 }
 $('speed').oninput = (e) => setSpeed(e.target.value);
 document.querySelectorAll('[data-sp]').forEach((b) => { b.onclick = () => setSpeed(b.dataset.sp); });
@@ -769,6 +793,87 @@ window.addEventListener('pointerup', () => { tlDrag = false; });
 $('tl').addEventListener('input', (e) => { st.seek = uToT(Number(e.target.value)); });
 $('np').onchange = (e) => { const keep = st.t; rebuild(Number(e.target.value)); st.t = T0; st.seek = keep; toast('粒子数を変更しました'); };
 $('rot').onchange = (e) => { cam.rot = e.target.checked; };
+
+// ------------------------------------------------------------------ ズーム(銀河→恒星系→惑星)
+let savedDir = 1, haloMarks = [], lastInfo = '';
+function fadeTo(fn) { const f = $('fade'); f.classList.add('on'); setTimeout(() => { fn(); setTimeout(() => f.classList.remove('on'), 60); }, 220); }
+function clearHaloMarks() { haloMarks.forEach((m) => m.el.remove()); haloMarks = []; }
+function setEventsVisible(v) { $('events').style.display = v ? '' : 'none'; $('tl').style.display = v ? '' : 'none'; }
+scenes = Scenes.create({
+  device, ctx, canvas, format, astro: Astro, cosmo, coarse, toast, fmtYears,
+  getDir: () => st.dir, getMult: () => st.mult, getExpo: () => Math.pow(10, Number($('expo').value)),
+  ui: { markers: $('markers') },
+  setInfo(o) {
+    const key = o.crumb.join('>') + '|' + o.era + '|' + o.big + '|' + o.rows.map((r) => r.join(':')).join(';');
+    if (key === lastInfo) return; lastInfo = key;
+    $('era').innerHTML = o.crumb.join(' › ') + '<br>' + o.era; $('age').textContent = o.big;
+    $('dl').style.display = 'none'; $('dl2').style.display = ''; $('dl2').innerHTML = o.rows.map(([k, v]) => '<dt>' + k + '</dt><dd>' + v + '</dd>').join('');
+  },
+  onEnter(kind) {
+    lastInfo = '';
+    if (kind === 'cosmos') { $('dl').style.display = ''; $('dl2').style.display = 'none'; $('bBack').style.display = 'none'; $('bZoom').style.display = ''; setEventsVisible(true); setDir(savedDir); }
+    else { $('bBack').style.display = ''; $('bZoom').style.display = 'none'; setEventsVisible(false); if (st.dir === 0) setDir(1); clearHaloMarks(); }
+    setSpeed($('speed').value);
+  },
+});
+function enterScene(fn) { savedDir = st.dir; fadeTo(fn); }
+$('bBack').onclick = () => scenes.back();
+{
+  const sb = document.createElement('button'); sb.className = 'small'; sb.textContent = '☀ 太陽系(実データ)'; sb.title = '太陽系へズーム';
+  sb.onclick = () => { if (st.t < cosmo.tNow - 4.6) { toast('太陽系はまだ生まれていません(約46億年前に誕生)'); return; } clearHaloMarks(); enterScene(() => scenes.enterSun()); };
+  $('events').appendChild(sb);
+}
+
+let stage = null;
+async function findHalos() {
+  if (!stage) stage = device.createBuffer({ size: G3 * 4, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+  if (st.densDirty) { submit((pass) => encodeDensity(pass)); st.densDirty = false; }
+  const enc = device.createCommandEncoder(); enc.copyBufferToBuffer(bufs.densF, 0, stage, 0, G3 * 4); device.queue.submit([enc.finish()]);
+  await stage.mapAsync(GPUMapMode.READ);
+  const d = new Float32Array(stage.getMappedRange().slice(0)); stage.unmap();
+  const sm = new Float32Array(G3);
+  for (let z = 0; z < G; z++) for (let y = 0; y < G; y++) for (let x = 0; x < G; x++) {
+    let sum = 0;
+    for (let dz = -1; dz <= 1; dz++) for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) sum += d[((x + dx) & 63) + (((y + dy) & 63) << 6) + (((z + dz) & 63) << 12)];
+    sm[x + (y << 6) + (z << 12)] = sum / 27;
+  }
+  const idx = Array.from({ length: G3 }, (_, i) => i).sort((a, b) => sm[b] - sm[a]);
+  const cellOf = (i) => [i & 63, (i >> 6) & 63, i >> 12];
+  const far = (i, list) => { const c = cellOf(i); return list.every((j) => { const o = cellOf(j); let s = 0; for (let k = 0; k < 3; k++) { let dd = Math.abs(c[k] - o[k]); dd = Math.min(dd, 64 - dd); s += dd * dd; } return s > 36; }); };
+  const peaks = [];
+  for (let k = 0; k < idx.length && peaks.length < 60; k++) if (far(idx[k], peaks)) peaks.push(idx[k]);
+  const chosen = [0, 1, 3, 6, 10, 16, 25, 40, 59].map((r) => peaks[r]).filter((v) => v !== undefined);
+  const rr = Astro.rng(SEED + Math.floor(st.t * 1000));
+  for (const [lo, hi] of [[1.2, 3], [0.3, 0.8]]) {
+    for (let tries = 0; tries < 4000; tries++) { const i = Math.floor(rr() * G3); if (sm[i] >= lo && sm[i] <= hi && far(i, chosen)) { chosen.push(i); break; } }
+  }
+  return chosen.map((i) => { const c = cellOf(i); return { c: [(c[0] + 0.5) / G, (c[1] + 0.5) / G, (c[2] + 0.5) / G], rho: sm[i], Mh: sm[i] * 2.5e11, seed: Astro.hashSeed(SEED, i) }; });
+}
+const SHORT = { cD: '巨大楕円', elliptical: '楕円', spiral: '渦巻', dwarf: '矮小' };
+$('bZoom').onclick = async () => {
+  if (haloMarks.length) { clearHaloMarks(); return; }
+  if (st.t < cosmo.tOfA(1 / 8)) { toast('まだ銀河がありません(銀河ができるのは約5億年後から)'); return; }
+  toast('銀河を探しています…', 1500);
+  const halos = await findHalos();
+  const tNow = st.t;
+  halos.forEach((h) => {
+    const type = Astro.galaxyType(h.Mh), el = document.createElement('button'); el.className = 'mk';
+    el.textContent = SHORT[type] + ' 10^' + Math.log10(h.Mh).toFixed(1) + 'M☉';
+    el.onclick = (e) => { e.stopPropagation(); clearHaloMarks(); enterScene(() => scenes.enterGalaxy({ Mh: h.Mh, rho: h.rho, seed: h.seed, tNow })); };
+    $('markers').appendChild(el); haloMarks.push({ el, c: h.c });
+  });
+  toast('光る印をタップすると、その銀河へズームします', 3000);
+};
+function placeHaloMarks(vp, boxScale) {
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  for (const m of haloMarks) {
+    const p = [(m.c[0] - 0.5) * boxScale, (m.c[1] - 0.5) * boxScale, (m.c[2] - 0.5) * boxScale];
+    const x = vp[0] * p[0] + vp[4] * p[1] + vp[8] * p[2] + vp[12], y = vp[1] * p[0] + vp[5] * p[1] + vp[9] * p[2] + vp[13], w = vp[3] * p[0] + vp[7] * p[1] + vp[11] * p[2] + vp[15];
+    const px = (x / w * 0.5 + 0.5) * W, py = (1 - (y / w * 0.5 + 0.5)) * H;
+    m.el.style.display = w > 0 ? '' : 'none';
+    m.el.style.transform = `translate(${px.toFixed(0)}px, ${py.toFixed(0)}px) translate(-50%, -50%)`;
+  }
+}
 setSpeed(0); setDir(1);
 
 // ------------------------------------------------------------------ 描画
@@ -788,6 +893,7 @@ function render(tReal, dpr) {
   const plasma = 1 - smooth(A_REC * 0.97, A_REC * 2.2, a);
   const boxScale = Math.min(1.5, Math.max(0.25, Math.pow(a, 0.2)));
   const expo = Math.pow(10, Number($('expo').value)) * Math.pow(262144 / N, 0.7);
+  placeHaloMarks(vp, boxScale);
   ru.set(vp, 0);
   ru.set([canvas.width, canvas.height, boxScale, 1.7 * dpr], 16);
   ru.set([expo, $('dm').checked ? 1 : 0, Math.pow(cosmo.lum(st.t), 0.45), fade], 20);
@@ -817,6 +923,7 @@ let last = performance.now(), t0Real = last;
 function frame(now) {
   const dtReal = Math.min(0.1, (now - last) / 1000); last = now;
   const dpr = resize();
+  if (scenes.active()) { st.logMode = false; scenes.frame(dtReal, dpr); requestAnimationFrame(frame); return; }
   if (cam.rot && ptrs.size === 0) cam.az += 0.03 * dtReal;
   st.logMode = false;
   if (st.seek !== null) {
@@ -837,7 +944,7 @@ function frame(now) {
 try {
   rebuild(np);
 } catch (e) { fatal('初期化に失敗しました: ' + e.message); throw e; }
-window.__cosmos = { st, cosmo, cam, simulate, rebuild: (n) => rebuild(n), device };
+window.__cosmos = { st, cosmo, cam, simulate, scenes, enterScene, findHalos, rebuild: (n) => rebuild(n), device };
 requestAnimationFrame(frame);
 })();
 </script>
