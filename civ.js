@@ -52,7 +52,7 @@
   function create(opts) {
     opts = opts || {};
     const seed = (opts.seed >>> 0) || 1, rnd = mulberry(seed ^ 0x5bd1e995);
-    const P = Object.assign({ attRate: 0.0002, base: 0.07, pop0: 260, agentsMax: 600, kLoad: 1.4e5 }, opts.params || {});
+    const P = Object.assign({ attRate: 0.0002, base: 0.07, pop0: 260, agentsMax: 150, kLoad: 1.4e5 }, opts.params || {});
     const w = {
       seed, year: 0, pop: P.pop0, items: [], timeline: [], ms: {}, caps: new Array(K).fill(0), over: false, collapsed: 0,
       Kcap: 0, ended: false, log: (year, kind, text) => w.timeline.push({ year: Math.round(year), kind, text }),
@@ -221,6 +221,43 @@
     // 推奨の刻み幅(年)。技術が増えるほど細かく
     function stepSize() { return w.caps[I] >= 6 ? 8 : 25; }
     function summary() { return { year: w.year, pop: w.pop, items: items.filter((x) => x.alive).length, total: items.length, caps: w.caps.slice(), ms: Object.assign({}, w.ms), collapsed: w.collapsed, ended: w.ended }; }
+    // ---- プログラム: 小さなスタックマシン。命令の名前は、この世界の「情報」系の技術名から付く。実際に実行して出力を得る。
+    const OPS = [['PUSH', '値を積む'], ['ADD', '足す'], ['SUB', '引く'], ['MUL', '掛ける'], ['DUP', '複製する'], ['SWAP', '入れ替える'], ['OVER', '2番目を複製'], ['ROT', '3つを回す'], ['POP', '捨てる'], ['JZ', '0ならジャンプ'], ['JMP', 'ジャンプ'], ['PRINT', '出力する'], ['HALT', '停止']];
+    const loopBody = (op) => [['DUP'], ['JZ', 13], ['OVER'], ['OVER'], [op], ['ROT'], ['POP'], ['SWAP'], ['PUSH', 1], ['SUB'], ['JMP', 2], ['POP'], ['PRINT'], ['HALT']];
+    const TASKS = [
+      { title: 'カウントダウン(5から1まで出力)', code: [['PUSH', 5], ['DUP'], ['PRINT'], ['PUSH', 1], ['SUB'], ['DUP'], ['JZ', 8], ['JMP', 1], ['HALT']] },
+      { title: '1から10までの合計', code: [['PUSH', 0], ['PUSH', 10]].concat(loopBody('ADD').slice(0)) },
+      { title: '6の階乗', code: [['PUSH', 1], ['PUSH', 6]].concat(loopBody('MUL').slice(0)) },
+      { title: '2のべき乗を8個出力', code: [['PUSH', 1], ['PUSH', 8], ['DUP'], ['JZ', 13], ['SWAP'], ['DUP'], ['PRINT'], ['PUSH', 2], ['MUL'], ['SWAP'], ['PUSH', 1], ['SUB'], ['JMP', 2], ['HALT']] },
+    ];
+    function runVM(code) {
+      const st = [], out = []; let pc = 0, n = 0;
+      while (pc < code.length && n++ < 5000) {
+        const [op, a] = code[pc++]; let x, y, z;
+        switch (op) {
+          case 'PUSH': st.push(a); break; case 'ADD': y = st.pop(); x = st.pop(); st.push(x + y); break; case 'SUB': y = st.pop(); x = st.pop(); st.push(x - y); break;
+          case 'MUL': y = st.pop(); x = st.pop(); st.push(x * y); break; case 'DUP': st.push(st[st.length - 1]); break; case 'SWAP': y = st.pop(); x = st.pop(); st.push(y, x); break;
+          case 'OVER': st.push(st[st.length - 2]); break; case 'ROT': z = st.pop(); y = st.pop(); x = st.pop(); st.push(y, z, x); break; case 'POP': st.pop(); break;
+          case 'JZ': if (st.pop() === 0) pc = a; break; case 'JMP': pc = a; break; case 'PRINT': out.push(st.pop()); break; case 'HALT': return out;
+        }
+      }
+      return out;
+    }
+    function programs() {
+      if (w.ms.programming === undefined) return [];
+      const pool = items.filter((x) => x.dom === I && x.alive && x.depth >= 2).map((x) => x.name), used = new Set(), names = {};
+      OPS.forEach(([op, jp], k) => { let nm = pool.length ? pool[h32(seed, 4000 + k) % pool.length] : null; if (!nm || used.has(nm)) nm = nameOf(seed, 3000 + k) + '式' + jp; used.add(nm); names[op] = nm; });
+      const order = TASKS.map((t, i) => [h32(seed, 5000 + i), i]).sort((a, b) => a[0] - b[0]).map((x) => x[1]);
+      const unlocked = Math.max(1, Math.min(TASKS.length, 1 + Math.floor((w.caps[I] - 7) / 1.2)));
+      return order.slice(0, unlocked).map((ti) => {
+        const t = TASKS[ti], out = runVM(t.code);
+        return { title: t.title, out, code: t.code.map(([op, a], addr) => ({ addr, name: names[op], meaning: OPS.find((o) => o[0] === op)[1], arg: a })) };
+      });
+    }
+    function individuals() {
+      return agents.slice(0, 5).map((a) => ({ age: Math.floor(a.age), known: a.arr.length, best: a.arr.slice().sort((x, y) => items[y].depth - items[x].depth).slice(0, 3).map((id) => items[id].name) }));
+    }
+    w.programs = programs; w.individuals = individuals; w.runVM = runVM;
     w.step = step; w.stepSize = stepSize; w.summary = summary; w.MILESTONES = MILESTONES; w.DIM_JP = DIM_JP;
     return w;
   }

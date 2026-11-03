@@ -92,19 +92,38 @@
   }
   const SYL2 = ['ア', 'イ', 'ウ', 'エ', 'オ', 'カ', 'キ', 'ク', 'ケ', 'コ', 'サ', 'シ', 'ス', 'セ', 'タ', 'チ', 'テ', 'ト', 'ナ', 'ニ', 'ネ', 'ノ', 'ハ', 'ヒ', 'フ', 'ホ', 'マ', 'ミ', 'ム', 'メ', 'モ', 'ヤ', 'ユ', 'ヨ', 'ラ', 'リ', 'ル', 'ロ'];
   // 生き物(種)を手続き生成する。実在の生物の再現ではなく、惑星の条件と乱数から作る。
+  // 植物の色: 地球は緑。ほかの惑星は、緑が多めだが紫・赤・黄・青緑・黒もありうる(光合成の色は恒星の光で変わる、という仮説)
+  const PLANT_PAL = [
+    [[0.10, 0.28, 0.07], [0.26, 0.42, 0.12]], [[0.45, 0.40, 0.08], [0.70, 0.62, 0.15]], [[0.45, 0.12, 0.06], [0.70, 0.30, 0.12]],
+    [[0.22, 0.08, 0.32], [0.45, 0.20, 0.55]], [[0.05, 0.30, 0.30], [0.12, 0.50, 0.55]], [[0.04, 0.04, 0.05], [0.12, 0.10, 0.14]],
+  ];
+  function plantColor(p, star) {
+    if (p.name === '地球' && p.life) { const A = PLANT_PAL[0][0]; return { a: A, b: A.map((v) => Math.min(1, v * 1.55 + 0.02)), idx: 0 }; }
+    const r = mb(Math.floor((p.seed || 1) * 131071) ^ 0x2545f491), cool = star.T < 3800;
+    const W = cool ? [0.34, 0.08, 0.05, 0.22, 0.08, 0.23] : [0.62, 0.12, 0.1, 0.06, 0.06, 0.04];
+    let x = r(), idx = 0; for (; idx < 5; idx++) { x -= W[idx]; if (x < 0) break; }
+    const j = () => 0.9 + 0.2 * r(), pal = PLANT_PAL[idx];
+    const A = pal[0].map((v) => Math.min(1, v * j()));
+    return { a: A, b: A.map((v) => Math.min(1, v * 1.55 + 0.02)), idx, black: idx === 5 };
+  }
   function species(p, star, bio, seed) {
     const r = mb(Math.floor(seed * 7919) ^ 0x1b873593), out = [];
     const nm = () => { let s = ''; const n = 2 + Math.floor(r() * 2); for (let i = 0; i < n; i++) s += SYL2[Math.floor(r() * SYL2.length)]; return s; };
     const g = p.g || 1, sz = Math.pow(1 / g, 0.4); // 重力が小さいと大きな体が作れる
     const hsv = (h, sat, v) => { const f = (n) => { const k = (n + h * 6) % 6; return v - v * sat * Math.max(0, Math.min(k, 4 - k, 1)); }; return [f(5), f(3), f(1)]; };
     // 光合成の色は恒星の色で変わる(冷たい星の下では黒っぽい植物になる、という仮説)
-    const T = star.T, plantHue = T < 3800 ? 0.78 : T < 5200 ? 0.2 : T < 6800 ? 0.3 : 0.12, plantV = T < 3800 ? 0.22 : 0.45;
+    const pc = plantColor(p, star);
+    const PLANS = [0, 0, 0, 1, 2, 2, 3, 3, 4, 5, 5]; // 体の作り(哺乳類型・首の長い草食・虫のような多足・二足・蛇のような細長い・足の長い走者)
     const stage = bio.stage, atm = p.atm || p.kind === 'earthlike';
     const add = (kind, label, habitat, n, base) => { for (let i = 0; i < n; i++) {
-      const hue = kind === 3 ? plantHue + (r() - 0.5) * 0.08 : r(), col = kind === 3 ? hsv(plantHue + (r() - 0.5) * 0.06, 0.55 + r() * 0.3, plantV + r() * 0.35) : hsv(hue, 0.15 + r() * 0.5, 0.3 + r() * 0.55);
-      const col2 = kind === 3 ? hsv(plantHue + 0.05 + r() * 0.1, 0.4 + r() * 0.4, plantV * 0.7 + r() * 0.3) : hsv((hue + 0.05 + r() * 0.2) % 1, 0.2 + r() * 0.5, 0.2 + r() * 0.6);
+      const hue = r(), mixv = r(), jit = 0.85 + 0.3 * r();
+      const col = kind === 3 ? pc.a.map((v, k) => Math.min(1, (v + (pc.b[k] - v) * mixv) * jit)) : hsv(hue, 0.15 + r() * 0.5, 0.3 + r() * 0.55);
+      const col2 = kind === 3 ? (pc.black ? [0.07, 0.06, 0.07] : [0.3 * jit, 0.2 * jit, 0.12 * jit]) : hsv((hue + 0.05 + r() * 0.2) % 1, 0.2 + r() * 0.5, 0.2 + r() * 0.6);
+      const plan = kind === 0 ? PLANS[Math.floor(r() * PLANS.length)] : 0;
+      let legs = kind === 0 ? 2 + 2 * Math.floor(r() * 3) : kind === 3 ? Math.floor(r() * 3) : 0;
+      if (kind === 0) legs = plan === 4 ? 0 : plan === 3 ? 2 : plan === 2 ? 6 : 4;
       out.push({ kind, habitat, label, name: nm() + (kind === 3 ? (r() < 0.5 ? '樹' : '草') : kind === 2 ? '魚' : kind === 1 ? '鳥' : kind === 4 ? '人' : '獣'),
-        size: base * (0.5 + r() * 1.5) * (kind === 3 ? 1 : sz), legs: kind === 0 ? 2 + 2 * Math.floor(r() * 3) : kind === 3 ? Math.floor(r() * 3) : 0, col, col2, speed: 0.3 + r() * 1.2, abundance: 0.4 + r() });
+        size: base * (0.5 + r() * 1.5) * (kind === 3 ? 1 : sz), legs, plan, col, col2, speed: 0.3 + r() * 1.2, abundance: 0.4 + r() });
     } };
     if (stage >= 5) add(2, '水中の生物', 'sea', 2 + Math.floor(r() * 3), 0.0006);
     if (stage >= 6) {
@@ -113,10 +132,7 @@
       if (atm) add(1, '空を飛ぶ動物', 'air', 1 + Math.floor(r() * 3), 0.0005);
     }
     if (bio.intelligent) add(4, '知的生命', 'land', 1, 0.0017);
-    if (bio.real) { // 地球: 一般的な姿(特定の実在種ではない)
-      out.forEach((s) => { if (s.kind === 3) { s.col = hsv(0.27, 0.65, 0.38 + r() * 0.2); s.col2 = hsv(0.1, 0.5, 0.3); } });
-    }
     return out;
   }
-  return { starLumAt, stateAt, tidalLockGyr, environment, STATE_JP, STATE_COLOR, TEQ, biosphere, species, STAGE_JP, cfg };
+  return { starLumAt, stateAt, tidalLockGyr, environment, STATE_JP, STATE_COLOR, TEQ, biosphere, species, plantColor, STAGE_JP, cfg };
 });

@@ -54,7 +54,10 @@
   .lbl { }
   #bUI { position: fixed; right: 8px; top: 50%; z-index: 30; width: 38px; height: 38px; padding: 0; border-radius: 50%; opacity: .55; font-size: 18px; }
   #bUI:hover { opacity: 1; }
-  body.hideui #info, body.hideui #opts, body.hideui #bar, body.hideui #civ, body.hideui #markers { display: none !important; }
+  body.hideui #info, body.hideui #opts, body.hideui #bar, body.hideui #civ, body.hideui #lifeP, body.hideui #markers { display: none !important; }
+  #lifeP { left: 16px; top: 250px; width: 300px; max-height: calc(100dvh - 450px); overflow-y: auto; font-size: 12px; line-height: 1.5; }
+  #lifeP button.hit { display: block; width: 100%; text-align: left; margin-top: 4px; }
+  #civ pre { margin: 4px 0; font-size: 11px; line-height: 1.35; white-space: pre-wrap; color: var(--fg); }
   #civ { right: 16px; top: 64px; width: 320px; max-height: calc(100dvh - 300px); overflow-y: auto; font-size: 12px; line-height: 1.5; }
   #civ .bars div { display: grid; grid-template-columns: 7.5em 1fr 2.6em; align-items: center; gap: 6px; }
   #civ .bars i { display: block; height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--accent), var(--accent2)); }
@@ -91,6 +94,7 @@
     #presets { display: none; }
     #note { display: none; }
     #toast { top: auto; bottom: 230px; max-width: 90vw; text-align: center; }
+    #lifeP { left: 8px; right: 8px; top: auto; bottom: 215px; width: auto; max-height: 34vh; }
     #civ { left: 8px; right: 8px; top: auto; bottom: 215px; width: auto; max-height: 34vh; }
     #bUI { top: 46%; }
   }
@@ -141,6 +145,7 @@
     <button id="bBack" title="ひとつ戻る" style="display:none">↩<span class="lbl"> 戻る</span></button>
     <button id="bBig" title="ビッグバンに戻す">⏮</button>
     <button id="bZoom" title="銀河にズーム">🔭<span class="lbl"> ズーム</span></button>
+    <button id="bLife" title="生命のいる惑星を探して、そこへ飛ぶ">🌱<span class="lbl"> 生命を探す</span></button>
     <button id="bLand" title="この惑星の地表に降りる" style="display:none">⬇<span class="lbl"> 着陸</span></button>
     <button id="bCiv" title="文明の実験" style="display:none">🏛<span class="lbl"> 文明</span></button>
     <button id="bWalk" title="押している間、前に進む(PCは W/↑ キー)" style="display:none">🚶<span class="lbl"> 前進</span></button>
@@ -170,16 +175,20 @@
     <select id="civSpeed"><option value="100">100年/秒</option><option value="1000" selected>1000年/秒</option><option value="10000">1万年/秒</option><option value="100000">10万年/秒</option></select></div>
   <div id="civBody"></div>
 </div>
+<div id="lifeP" class="panel" style="display:none">
+  <div class="row" style="justify-content:space-between"><b>🌱 生命のいる惑星</b><button class="small" id="lifeX">✕</button></div>
+  <div id="lifeBody" style="color:var(--dim)"></div>
+</div>
 <div id="markers"></div>
 <div id="fade"></div>
 <div id="toast"></div>
 <div id="fatal"><div id="fatalMsg"></div></div>
 
-<script src="cosmology.js?v=10"></script>
-<script src="astro.js?v=10"></script>
-<script src="life.js?v=10"></script>
-<script src="civ.js?v=10"></script>
-<script src="scenes.js?v=10"></script>
+<script src="cosmology.js?v=12"></script>
+<script src="astro.js?v=12"></script>
+<script src="life.js?v=12"></script>
+<script src="civ.js?v=12"></script>
+<script src="scenes.js?v=12"></script>
 <script>
 (async function () {
 'use strict';
@@ -955,6 +964,8 @@ scenes = Scenes.create({
   onEnter(kind) {
     lastInfo = '';
     $('bLand').style.display = kind === 'planet' ? '' : 'none';
+    $('bLife').style.display = kind === 'cosmos' || kind === 'galaxy' ? '' : 'none';
+    if (kind !== 'galaxy' && kind !== 'cosmos') $('lifeP').style.display = 'none';
     $('bWalk').style.display = kind === 'surface' ? '' : 'none';
     $('bCiv').style.display = kind === 'surface' && scenes.civTarget() ? '' : 'none';
     if (kind !== 'surface') $('civ').style.display = 'none';
@@ -968,6 +979,31 @@ $('bLand').onclick = () => scenes.land();
   const w = $('bWalk'), on = (v) => (e) => { e.preventDefault(); scenes.setWalk(v); };
   w.addEventListener('pointerdown', on(1)); w.addEventListener('pointerup', on(0)); w.addEventListener('pointerleave', on(0)); w.addEventListener('pointercancel', on(0));
 }
+// ------------------------------------------------------------------ 生命のいる惑星へ飛ぶ
+$('lifeX').onclick = () => { $('lifeP').style.display = 'none'; };
+function paintLife(list, done, scanned) {
+  const el = $('lifeBody'); $('lifeP').style.display = '';
+  el.innerHTML = '';
+  const head = document.createElement('div'); head.textContent = (done ? '探索おわり: ' : '探索中… ') + scanned + ' 個の恒星を調べ、' + list.length + ' 個の惑星が見つかりました(確率モデルによる仮説)。押すとその惑星へ飛びます。';
+  el.appendChild(head);
+  list.forEach((f) => {
+    const b = document.createElement('button'); b.className = 'small hit';
+    b.textContent = '🌱 恒星#' + f.i + ' の ' + f.name + ' — ' + (f.intelligent ? '知的生命がいる' : Life.STAGE_JP[f.stage].split('(')[0]);
+    b.onclick = () => { $('lifeP').style.display = 'none'; scenes.flyTo(f.i, f.k); };
+    el.appendChild(b);
+  });
+}
+$('bLife').onclick = async () => {
+  if (scenes.kind === 'galaxy') { paintLife([], false, 0); scenes.scanLife(paintLife); return; }
+  if (st.t < 9) { st.seek = cosmo.tNow; setDir(0); toast('宇宙が若すぎます。現在へ移動します。着いたらもう一度 🌱 を押してください', 5000); return; }
+  toast('生命のいる銀河を探しています…', 2500);
+  const halos = await findHalos(), tNow = st.t;
+  const sp = halos.filter((h) => Astro.galaxyType(h.Mh) === 'spiral')[0] || halos[0];
+  if (!sp) return;
+  clearHaloMarks();
+  enterScene(() => { scenes.enterGalaxy({ Mh: sp.Mh, rho: sp.rho, seed: sp.seed, tNow }); setTimeout(() => { paintLife([], false, 0); scenes.scanLife(paintLife); }, 300); });
+};
+
 // ------------------------------------------------------------------ 文明の実験(civ.js)
 let civ = null, civKey = null, civRunning = true, civRuns = 0, civMsSeen = 0, civSeedNo = 0, civPaint = 0;
 const fmtPop = (x) => (x >= 1e8 ? (x / 1e8).toFixed(2) + '億' : x >= 1e4 ? (x / 1e4).toFixed(1) + '万' : Math.round(x).toString());
@@ -997,12 +1033,16 @@ function paintCiv(force) {
   const bars = Civ.DIM_JP.map((n, i) => '<div><span>' + n + '</span><span style="background:rgba(127,166,255,.12);border-radius:3px"><i style="width:' + Math.min(100, caps[i] / 16 * 100).toFixed(1) + '%"></i></span><span style="text-align:right">' + caps[i].toFixed(1) + '</span></div>').join('');
   const ms = Civ.MILESTONES.map((m) => '<span class="' + (s.ms[m.key] !== undefined ? 'on' : '') + '" title="' + (s.ms[m.key] !== undefined ? fmtYears(s.ms[m.key]) : '未到達') + '">' + m.jp.split('(')[0] + '</span>').join('');
   const tl = civ.timeline.slice(-14).reverse().map((e) => '<div>' + fmtYears(e.year) + ' ' + e.text + '</div>').join('');
-  body.innerHTML = '<div style="margin-top:6px">世界のシード <b>' + civSeedNo + '</b> ・ ' + fmtYears(s.year) + '経過 ・ 人口 ' + fmtPop(s.pop) + ' ・ 技術 ' + s.items + '(作られた総数 ' + s.total + ')' + (s.ended ? ' <b style="color:#f87171">途絶えた</b>' : '') + '</div><div class="bars" style="margin-top:6px">' + bars + '</div><div class="ms">' + ms + '</div><div class="tl">' + tl + '</div>';
+  const ind = civ.individuals().map((x) => '<div>・' + x.age + '歳 / 知っている技術 ' + x.known + ' 個 / 得意: ' + x.best.join('、') + '</div>').join('');
+  const progs = civ.programs();
+  const progHtml = progs.length ? '<details style="margin-top:6px"><summary><b>💻 この世界で書かれたプログラム(' + progs.length + '本・実際に実行した結果)</b></summary>' + progs.map((pg) => '<div style="margin-top:6px"><b>' + pg.title + '</b> → 出力: ' + pg.out.join(', ') + '<pre>' + pg.code.map((c) => String(c.addr).padStart(2, ' ') + ' ' + c.name + (c.arg !== undefined ? ' ' + c.arg : '') + '  ; ' + c.meaning).join('\n') + '</pre></div>').join('') + '<div style="color:var(--dim)">命令の名前は、この世界の「情報」系の技術名から付いています(意味は右の説明)。</div></details>' : '';
+  const indHtml = '<details style="margin-top:6px"><summary><b>👤 注目している個人(全体から ' + Math.min(150, Math.floor(s.pop)) + ' 人を追跡中)</b></summary>' + ind + '</details>';
+  body.innerHTML = '<div style="margin-top:6px">世界のシード <b>' + civSeedNo + '</b> ・ ' + fmtYears(s.year) + '経過 ・ 人口 ' + fmtPop(s.pop) + ' ・ 技術 ' + s.items + '(作られた総数 ' + s.total + ')' + (s.ended ? ' <b style="color:#f87171">途絶えた</b>' : '') + '</div><div class="bars" style="margin-top:6px">' + bars + '</div><div class="ms">' + ms + '</div><div class="tl">' + tl + '</div>' + indHtml + progHtml;
 }
 function enterScene(fn) { savedDir = st.dir; fadeTo(fn); }
 function scenesOnEnterCosmos() {
   lastInfo = '';
-  $('bLand').style.display = 'none'; $('bWalk').style.display = 'none';
+  $('bLand').style.display = 'none'; $('bWalk').style.display = 'none'; $('bLife').style.display = '';
   $('dl').style.display = ''; $('dl2').style.display = 'none'; $('bBack').style.display = 'none'; $('bZoom').style.display = ''; setEventsVisible(true); setDir(savedDir);
   setSpeed($('speed').value);
 }

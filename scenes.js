@@ -167,7 +167,7 @@ fn starfield(d: vec3f) -> vec3f {
       } else {
         if (kind == 6) { c0 = mix(vec3f(0.62, 0.34, 0.2), vec3f(0.78, 0.5, 0.3), m) * (0.65 + 0.7 * h); }
         else if (u.p3.w > 0.5) {
-          let green = mix(vec3f(0.1, 0.28, 0.07), vec3f(0.26, 0.42, 0.12), m);
+          let green = mix(u.p3.xyz, u.p4.xyz, m);
           c0 = mix(vec3f(0.7, 0.58, 0.36), green, smoothstep(0.42, 0.56, m));
           c0 = mix(c0, c0 * 0.55, smoothstep(sea + 0.12, sea + 0.3, h));
         } else {
@@ -223,7 +223,7 @@ fn starfield(d: vec3f) -> vec3f {
 `;
 
 const SURF_WGSL = /* wgsl */`
-struct U { f: vec4f, r: vec4f, u: vec4f, L: vec4f, s0: vec4f, eb: vec4f, nb: vec4f, w: vec4f, atm: vec4f, sc: vec4f, m: vec4f, z: vec4f };
+struct U { f: vec4f, r: vec4f, u: vec4f, L: vec4f, s0: vec4f, eb: vec4f, nb: vec4f, w: vec4f, atm: vec4f, sc: vec4f, m: vec4f, z: vec4f, y: vec4f };
 @group(0) @binding(0) var<uniform> u: U;
 struct PO { @builtin(position) p: vec4f, @location(0) uv: vec2f };
 @vertex fn vs(@builtin(vertex_index) vi: u32) -> PO {
@@ -354,7 +354,7 @@ fn skyCol(rd: vec3f, Ls: vec3f, withDisk: bool) -> vec3f {
       if (u.m.z > 0.5 && h < u.nb.w) { alb = vec3f(0.85, 0.92, 0.98); }
       else if (kind == 0) {
         if (u.m.y > 0.5) {
-          let green = mix(vec3f(0.1, 0.28, 0.07), vec3f(0.26, 0.42, 0.12), mo);
+          let green = mix(u.z.yzw, min(u.z.yzw * 1.55 + vec3f(0.02), vec3f(1.0)), mo);
           alb = mix(vec3f(0.7, 0.58, 0.36), green, smoothstep(0.42, 0.56, mo));
           alb = mix(alb, alb * 0.55, smoothstep(0.12, 0.3, h - u.nb.w));
         } else { alb = mix(vec3f(0.5, 0.36, 0.26), vec3f(0.66, 0.54, 0.4), mo); }
@@ -370,6 +370,18 @@ fn skyCol(rd: vec3f, Ls: vec3f, withDisk: bool) -> vec3f {
       else if (kind == 3) { alb = mix(vec3f(0.78, 0.88, 0.96), vec3f(0.55, 0.7, 0.85), h) * (0.9 + 0.2 * micro); }
       else if (kind == 5) { alb = vec3f(0.5, 0.32, 0.2) * (0.7 + 0.5 * micro2); }
       else { alb = vec3f(0.34 + 0.3 * h) * (0.8 + 0.35 * micro) * mix(1.0, 0.6, smoothstep(0.45, 0.55, fbm3(vec3f(xzW * 0.5, u.w.z), 3))); }
+      let lvlU = i32(u.y.x + 0.5);
+      if (lvlU >= 1) { // 文明の段階に応じた道: 主要な道(間隔が広い)と、町の中の細かい道
+        let w2 = xzW + (vec2f(noise3(vec3f(xzW * 1.3, 7.0)), noise3(vec3f(xzW * 1.3 + 4.0, 8.0))) - 0.5) * 0.12;
+        let town = smoothstep(0.5, 0.62, noise3(vec3f(xzW * 0.8, 11.0)));
+        let g1 = abs(fract(w2 / 1.1 + 0.5) - 0.5) * 1.1; let g2 = abs(fract(w2 / 0.11 + 0.5) - 0.5) * 0.11;
+        let rw1 = select(0.0016, 0.004, lvlU >= 3); let rw2 = select(0.0, select(0.0022, 0.0035, lvlU >= 3), lvlU >= 2);
+        let r1 = 1.0 - smoothstep(rw1 * 0.7, rw1, min(g1.x, g1.y));
+        let r2 = (1.0 - smoothstep(rw2 * 0.7, rw2 + 0.0001, min(g2.x, g2.y))) * town * select(0.0, 1.0, lvlU >= 2);
+        let road = max(r1, r2);
+        let rc = select(vec3f(0.5, 0.42, 0.3), vec3f(0.13, 0.13, 0.14), lvlU >= 3);
+        alb = mix(alb, rc, road * 0.92);
+      }
       let ext = select(1.0, smoothstep(-0.03, 0.14, Ls.y), atmD > 0.0);
       let tint = mix(vec3f(1.0), mix(vec3f(1.0, 0.5, 0.25), vec3f(1.0), smoothstep(0.0, 0.3, Ls.y)), min(atmD, 1.0));
       let direct = max(dot(n, Ls), 0.0) * smoothstep(-0.02, 0.05, Ls.y) * ext;
@@ -440,23 +452,54 @@ fn sdTri(p: vec2f, x0: f32, y0: f32, w: f32, hgt: f32) -> f32 { return max(abs(p
   let day = smoothstep(-0.12, 0.18, Ls.y);
   var d = 1.0; var col = i.c1.rgb; var emis = vec3f(0.0);
   if (kind == 0) {
-    d = sdE(p, vec2f(0.0, 0.52), vec2f(0.55, 0.2));
-    d = min(d, sdE(p, vec2f(0.66, 0.66), vec2f(0.2, 0.14)));
-    d = min(d, sdCap(p, vec2f(0.45, 0.58), vec2f(0.62, 0.64), 0.07));
-    d = min(d, sdCap(p, vec2f(-0.5, 0.56), vec2f(-0.92, 0.38 + 0.08 * sin(ph * 2.0)), 0.035));
-    let pairs = max(floor(st * 0.5), 1.0);
+    let plan = floor(st / 10.0 + 0.001); let legs = st - plan * 10.0;
+    var tops = array<f32, 6>(0.4, 0.35, 0.2, 0.4, 0.0, 0.5);
+    var eyes = array<vec2f, 6>(vec2f(0.66, 0.64), vec2f(0.82, 0.96), vec2f(0.64, 0.34), vec2f(0.44, 0.98), vec2f(0.69, 0.13), vec2f(0.6, 0.94));
+    let pi = i32(clamp(plan, 0.0, 5.0));
+    if (pi == 0) {
+      d = sdE(p, vec2f(0.0, 0.5), vec2f(0.5, 0.21));
+      d = min(d, sdE(p, vec2f(0.6, 0.6), vec2f(0.17, 0.15)));
+      d = min(d, sdCap(p, vec2f(0.42, 0.55), vec2f(0.55, 0.6), 0.09));
+      d = min(d, sdCap(p, vec2f(0.64, 0.72), vec2f(0.6, 0.88), 0.04));
+      d = min(d, sdCap(p, vec2f(-0.48, 0.55), vec2f(-0.75, 0.5 + 0.08 * sin(ph * 2.0)), 0.05));
+    } else if (pi == 1) {
+      d = sdE(p, vec2f(0.0, 0.45), vec2f(0.5, 0.19));
+      d = min(d, sdCap(p, vec2f(0.38, 0.5), vec2f(0.72, 0.92), 0.06));
+      d = min(d, sdE(p, vec2f(0.8, 0.95), vec2f(0.12, 0.06)));
+      d = min(d, sdCap(p, vec2f(-0.5, 0.5), vec2f(-1.0, 0.32 + 0.06 * sin(ph * 2.0)), 0.04));
+    } else if (pi == 2) {
+      d = sdE(p, vec2f(0.0, 0.3), vec2f(0.55, 0.2));
+      d = min(d, sdE(p, vec2f(0.6, 0.32), vec2f(0.16, 0.13)));
+      d = min(d, sdCap(p, vec2f(0.68, 0.4), vec2f(0.85, 0.7 + 0.05 * sin(ph * 3.0)), 0.015));
+      d = min(d, sdCap(p, vec2f(0.62, 0.4), vec2f(0.7, 0.75 - 0.05 * sin(ph * 3.0)), 0.015));
+    } else if (pi == 3) {
+      d = sdE(p, vec2f(0.0, 0.58), vec2f(0.3, 0.26));
+      d = min(d, sdCap(p, vec2f(0.2, 0.7), vec2f(0.32, 0.95), 0.07));
+      d = min(d, sdE(p, vec2f(0.4, 0.97), vec2f(0.1, 0.06)));
+      d = min(d, sdCap(p, vec2f(-0.25, 0.6), vec2f(-0.5, 0.45), 0.05));
+    } else if (pi == 4) {
+      for (var k = 0; k < 8; k++) { let fk = f32(k); d = min(d, length(p - vec2f(-0.85 + 0.22 * fk, 0.12 + 0.07 * sin(ph * 2.0 + fk))) - (0.07 + select(0.0, 0.03, k == 7))); }
+    } else {
+      d = sdE(p, vec2f(0.0, 0.62), vec2f(0.4, 0.15));
+      d = min(d, sdCap(p, vec2f(0.34, 0.68), vec2f(0.5, 0.9), 0.05));
+      d = min(d, sdE(p, vec2f(0.56, 0.92), vec2f(0.12, 0.07)));
+      d = min(d, sdCap(p, vec2f(0.52, 0.97), vec2f(0.45, 1.0), 0.02));
+    }
+    let pairs = max(floor(legs * 0.5), 1.0);
     var dl = 1.0;
+    let lr = select(0.04, select(0.03, 0.025, pi == 2), pi == 5 || pi == 2);
     for (var k = 0; k < 6; k++) {
-      if (f32(k) >= st) { break; }
+      if (f32(k) >= legs) { break; }
       let pr = f32(k / 2);
-      let fx = mix(-0.38, 0.38, select(0.5, pr / max(pairs - 1.0, 1.0), pairs > 1.0));
+      var fx = mix(-0.38, 0.38, select(0.5, pr / max(pairs - 1.0, 1.0), pairs > 1.0));
+      if (pi == 3) { fx = 0.0; }
       let sw = 0.09 * sin(ph * 3.0 + f32(k) * 3.14159 + pr);
-      dl = min(dl, sdCap(p, vec2f(fx, 0.4), vec2f(fx + sw, 0.0), 0.04));
+      dl = min(dl, sdCap(p, vec2f(fx, tops[pi]), vec2f(fx + sw, 0.0), lr));
     }
     if (dl < d) { col = i.c2.rgb; }
-    if (p.x > 0.5 && p.y > 0.5) { col = mix(i.c1.rgb, i.c2.rgb, 0.5); }
+    if (length(p - eyes[pi]) < 0.07) { col = mix(i.c1.rgb, i.c2.rgb, 0.6); }
     d = min(d, dl);
-    if (length(p - vec2f(0.72, 0.7)) < 0.03) { col = vec3f(0.02); }
+    if (length(p - eyes[pi]) < 0.025) { col = vec3f(0.02); }
   } else if (kind == 1) {
     let f = sin(ph * 6.0);
     d = sdE(p, vec2f(0.0, 0.5), vec2f(0.28, 0.12));
@@ -569,7 +612,7 @@ function create(env) {
   const U = GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, ST = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST;
   const galU = device.createBuffer({ size: 96, usage: U }), sprU = device.createBuffer({ size: 80, usage: U }), plU = device.createBuffer({ size: 192, usage: U });
   const plBG = device.createBindGroup({ layout: plL.b, entries: [{ binding: 0, resource: { buffer: plU } }] });
-  const surfU = device.createBuffer({ size: 192, usage: U });
+  const surfU = device.createBuffer({ size: 256, usage: U });
   const surfBG = device.createBindGroup({ layout: plL.b, entries: [{ binding: 0, resource: { buffer: surfU } }] });
   const MAXC = 700, crBuf = device.createBuffer({ size: MAXC * 64, usage: ST });
   const crBG = device.createBindGroup({ layout: surfCL.b, entries: [{ binding: 0, resource: { buffer: surfU } }, { binding: 1, resource: { buffer: crBuf } }] });
@@ -614,8 +657,63 @@ function create(env) {
     S.gal = { ...gal, sts, n, A, B, tNow: halo.tNow, rho: halo.rho };
     S.kind = 'galaxy'; S.clock = 0; S.stack = ['cosmos'];
     Object.assign(cams.galaxy, { az: 0.4, el: 0.95, dist: Math.max(1.2, gal.R * GS * 2.4) });
-    clearLabels();
+    clearLabels(); S.gfound = []; S.scanTok = null;
+    addGalaxyLabels();
     env.onEnter('galaxy');
+  }
+  // 銀河の中で、押しやすい印をつける: 太陽に近い恒星(最大14個)と、生命のいる惑星が見つかった恒星(🌱)
+  function addGalaxyLabels() {
+    clearLabels();
+    const g = S.gal; if (!g) return;
+    const r = astro.rng(g.seed ^ 0x3c6ef372), picks = [];
+    for (let t = 0; t < 4000 && picks.length < 14; t++) {
+      const i = Math.floor(r() * g.n), m = g.sts.mass[i];
+      if (m < 0.75 || m > 1.25 || g.tNow - g.sts.birth[i] < 1 || g.A[i * 4] > 9) continue;
+      picks.push(i);
+    }
+    S.gpts = []; S.labels = [];
+    for (const f of S.gfound || []) {
+      S.gpts.push(f.i);
+      S.labels.push(addLabel('🌱 ' + (f.intelligent ? '知的生命' : env.life.STAGE_JP[f.stage].split('(')[0]), () => flyTo(f.i, f.k), 'pl'));
+    }
+    for (const i of picks) {
+      const m = g.sts.mass[i], sp = astro.starFromMass(m, Math.max(0.1, g.tNow - g.sts.birth[i])).spec;
+      S.gpts.push(i); S.labels.push(addLabel('☆ ' + sp + '型 ' + m.toFixed(1) + 'M☉', () => fade(() => enterStarSystem(i))));
+    }
+  }
+  function specOf(i) {
+    const g = S.gal, r = g.A[i * 4], birth = g.sts.birth[i];
+    return { seed: astro.hashSeed(g.seed, i), mass: g.sts.mass[i], Z: astro.metallicity(g, birth, r), age: g.tNow - birth, name: '恒星 #' + i };
+  }
+  function flyTo(i, k) { if (S.kind !== 'galaxy') return; clearLabels(); fade(() => { enterStarSystem(i); enterPlanet(k); }); }
+  // 生命のいる惑星を探す(太陽に近い恒星を順に調べる。結果は少しずつ cb に渡す)
+  function scanLife(cb) {
+    if (S.kind !== 'galaxy') return false;
+    const g = S.gal, tok = S.scanTok = {}, start = Math.floor(astro.rng(g.seed ^ 0x51ed27)() * g.n);
+    let scanned = 0; const found = S.gfound = [];
+    const chunk = () => {
+      if (S.scanTok !== tok || S.kind !== 'galaxy') return;
+      const t0 = performance.now(); let changed = false;
+      while (performance.now() - t0 < 10 && scanned < 8000 && found.length < 12) {
+        const idx = (start + scanned * 7919) % g.n; scanned++;
+        const m = g.sts.mass[idx], age = g.tNow - g.sts.birth[idx];
+        if (m < 0.6 || m > 1.4 || age < 2.5) continue;
+        const sys = astro.makeSystem(specOf(idx));
+        let best = null;
+        sys.planets.forEach((p, k) => {
+          if (p.type !== 'rock') return;
+          const ev = env.life.environment(p, sys.star, sys.star.age), bio = env.life.biosphere(p, sys.star, sys.star.age, ev, p.seed || 1);
+          if (bio.stage >= 6 && (!best || bio.stage > best.stage)) best = { i: idx, k, name: p.name, stage: bio.stage, intelligent: !!bio.intelligent };
+        });
+        if (best) { found.push(best); changed = true; }
+      }
+      const done = scanned >= 8000 || found.length >= 12;
+      if (changed) { found.sort((a, b) => b.stage - a.stage); addGalaxyLabels(); }
+      cb(found.slice(), done, scanned);
+      if (!done) requestAnimationFrame(chunk);
+    };
+    requestAnimationFrame(chunk);
+    return true;
   }
   const galScale = () => GS;
   function starPos(i, tMyr) {
@@ -702,6 +800,7 @@ function create(env) {
   }
 
   // ------------------------------------------------------------ 惑星
+  const vegOf = (p) => p.vegCol || (p.vegCol = env.life.plantColor(p, S.sys.star));
   const greenOf = (p) => (p.life || (p.bio && p.bio.stage >= 6)) ? 1 : 0;
   const bioText = (p) => {
     const b = p.bio, SJ = env.life.STAGE_JP;
@@ -739,8 +838,9 @@ function create(env) {
     u.set([sea, 0, cloud, kind], 28);
     u.set([atmCol[0], atmCol[1], atmCol[2], atmCol[3]], 32);
     u.set([p.seed || 1, 8.4 - cam.dist * 1.2, p.tsurf || 280, 0], 36);
-    u.set([...(p.type === 'rock' ? [0, 0, 0] : p.tintA), greenOf(p)], 40);
-    u.set([...(p.tintB || [0, 0, 0]), 0], 44);
+    const veg = vegOf(p);
+    u.set([...(p.type === 'rock' ? veg.a : p.tintA), greenOf(p)], 40);
+    u.set([...(p.type === 'rock' ? veg.b : (p.tintB || [0, 0, 0])), 0], 44);
     device.queue.writeBuffer(plU, 0, u);
     S.pcam = { right, up, fwd, dist: cam.dist, asp: W / H, Wb, alpha };
   }
@@ -820,6 +920,8 @@ function create(env) {
     env.toast(p.name === '地球' ? '地球の地表です(生き物は手続き生成の姿で、実在の種そのものではありません)' : '地表に降り立ちました: ' + bioText(p), 5200);
   }
   // ---- 生き物と建物(地表のセルごとに、シードから決まる配置)
+  const smoothstep01 = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const noise3js = (x, y, z) => noise3(x, y, z);
   const hh = (a, b, c, d) => { let h = 2166136261 ^ (a | 0); h = Math.imul(h ^ (b | 0), 16777619); h = Math.imul(h ^ (c | 0), 0x85ebca6b); h = Math.imul(h ^ (d | 0), 0xc2b2ae35); h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d); h ^= h >>> 13; return (h >>> 0) / 4294967296; };
   function civLevel() {
     const p = S.pl, b = p.bio; if (!b || !b.intelligent) return 0;
@@ -829,7 +931,7 @@ function create(env) {
   }
   function buildCreatures(sf, tsec) {
     const p = S.pl, F = S.fauna || [], by = (k) => F.filter((x) => x.kind === k), data = new Float32Array(MAXC * 16), list = [];
-    const plants = by(3), animals = by(0), birds = by(1), fish = by(2), people = by(4), lvl = S.civNow = civLevel();
+    const plants = by(3), animals = by(0), birds = by(1), fish = by(2), people = by(4), lvl = S.civNow || 0;
     const cell = 0.04, R = 7, seed = Math.floor((p.seed || 1) * 1000) | 0;
     const ci0 = Math.floor(sf.wx / cell), cj0 = Math.floor(sf.wz / cell);
     const add = (kind, x, z, size, sp, style, phase, head, hab, alt, wr, c1, c2) => (x - sf.wx) ** 2 + (z - sf.wz) ** 2 > 1.5e-4 && list.push({ d2: (x - sf.wx) ** 2 + (z - sf.wz) ** 2, v: [x, z, size, kind, c1[0], c1[1], c1[2], style, c2[0], c2[1], c2[2], phase, head, hab, alt, wr] });
@@ -844,8 +946,13 @@ function create(env) {
       if (people.length && lvl >= 0 && r(22) < (lvl ? 0.012 : 0.006)) { const sp = people[0], a = tsec * 0.1 + r(23) * 6.28; add(4, X(24) + 0.005 * Math.sin(a), Z(24) + 0.005 * Math.cos(a), sp.size, sp, 0, tsec * 3 + r(25) * 6, Math.atan2(Math.cos(a), -Math.sin(a)), 0, 0, 0.5, sp.col, sp.col2); }
       if (lvl >= 1 && people.length) {
         const wall = [[0.62, 0.5, 0.36], [0.72, 0.68, 0.6], [0.55, 0.58, 0.62], [0.7, 0.74, 0.78]], roof = [[0.42, 0.3, 0.16], [0.55, 0.25, 0.2], [0.3, 0.3, 0.32], [0.3, 0.35, 0.4]];
+        const town = smoothstep01(0.5, 0.62, noise3js((ci + 0.5) * cell * 0.8, (cj + 0.5) * cell * 0.8, 11)), core = smoothstep01(0.6, 0.7, noise3js((ci + 0.5) * cell * 0.8, (cj + 0.5) * cell * 0.8, 11));
+        const tryT = (lv, prob, size, wr, k) => { if (lvl >= lv + 1 && r(k) < prob && Math.hypot(X(k + 1) - sf.wx, Z(k + 1) - sf.wz) > 0.06) add(5, X(k + 1), Z(k + 1), size * (0.8 + 0.4 * r(k + 2)), null, lv, 0, 0, 0, 0, wr, wall[lv], roof[lv]); };
+        if (lvl >= 2) { tryT(1, 0.16 * town, 0.007, 1.2, 60); tryT(0, 0.05 * town, 0.0035, 1.0, 63); }
+        if (lvl >= 3) tryT(2, 0.07 * core, 0.035, 0.5, 66);
+        if (lvl >= 4) tryT(3, 0.06 * core, 0.07, 0.6, 69);
         const tryS = (lv, prob, size, wr, k) => { if (lvl >= lv + 1 && r(k) < prob && Math.hypot(X(k + 1) - sf.wx, Z(k + 1) - sf.wz) > 0.06) add(5, X(k + 1), Z(k + 1), size * (0.8 + 0.4 * r(k + 2)), null, lv, 0, 0, 0, 0, wr, wall[lv], roof[lv]); };
-        tryS(0, lvl >= 2 ? 0.01 : 0.03, 0.0035, 1.0, 30); tryS(1, lvl >= 3 ? 0.02 : 0.015, 0.007, 1.2, 33); tryS(2, 0.012, 0.035, 0.5, 36); tryS(3, 0.01, 0.07, 0.6, 39);
+        tryS(0, lvl >= 2 ? 0.006 : 0.03, 0.0035, 1.0, 30); if (lvl < 2) tryS(1, 0.015, 0.007, 1.2, 33);
       }
     }
     list.sort((a, b) => b.d2 - a.d2);
@@ -877,11 +984,12 @@ function create(env) {
     const star = S.sys.star, bb = astro.blackbody(star.T), bm = Math.max(bb[0], bb[1], bb[2], 0.01);
     const half = Math.max(0.0008, 0.00465 * (star.R || 1) / p.a);
     const relief = Math.max(5, Math.min(150, 45 / (p.g || 1)));
-    const u = new Float32Array(48);
+    const u = new Float32Array(52);
     u.set([...f, W / H], 0); u.set([...r, 0.6 * cam.dist], 4); u.set([...up, 0.0018], 8); u.set([...Ls, S.clock], 12);
     u.set([...sf.s0, R], 16); u.set([...sf.Eb, relief], 20); u.set([...sf.Nb, hasWater ? sea : 0.35], 24);
     u.set([sf.wx, sf.wz, p.seed || 1, kind], 28); u.set(atm, 32); u.set([bb[0] / bm, bb[1] / bm, bb[2] / bm, half], 36);
-    u.set([p.tsurf || 280, greenOf(p), hasWater, sea], 40); u.set([Math.abs(sf.s0[1]), 0, 0, 0], 44);
+    const veg = vegOf(p), lvl = S.civNow = civLevel();
+    u.set([p.tsurf || 280, greenOf(p), hasWater, sea], 40); u.set([Math.abs(sf.s0[1]), ...veg.a], 44); u.set([lvl, 0, 0, 0], 48);
     device.queue.writeBuffer(surfU, 0, u);
     buildCreatures(sf, performance.now() / 1000);
   }
@@ -893,7 +1001,7 @@ function create(env) {
     fade(() => {
       clearLabels();
       if (prev === 'cosmos') { S.kind = 'cosmos'; env.onEnter('cosmos'); }
-      else if (prev === 'galaxy') { S.kind = 'galaxy'; S.sys = null; env.onEnter('galaxy'); }
+      else if (prev === 'galaxy') { S.kind = 'galaxy'; S.sys = null; addGalaxyLabels(); env.onEnter('galaxy'); }
       else if (prev === 'planet') { S.kind = 'planet'; S.sf = null; env.onEnter('planet'); }
       else if (prev === 'system') { S.kind = 'system'; S.pl = null; S.labels = S.sys.planets.map((p, i) => addLabel(p.name + (p.env.nowLiquid ? ' ★' : ''), () => enterPlanet(i), 'pl')); env.onEnter('system'); }
     });
@@ -976,6 +1084,7 @@ function create(env) {
       u.set([S.clock, GS, 0, 0], 20);
       device.queue.writeBuffer(galU, 0, u);
       pass.setPipeline(galPipe); pass.setBindGroup(0, galBG); pass.draw(6, g.n);
+      if (S.gpts) placeLabels(vp, W, H, S.gpts.map((i) => starPos(i, S.clock)));
     } else if (S.kind === 'system') {
       const { count } = systemFrame(dtReal, W, H, dpr);
       pass.setPipeline(sprPipe); pass.setBindGroup(0, sprBG); pass.draw(6, count);
@@ -995,7 +1104,7 @@ function create(env) {
   return {
     get kind() { return S.kind; }, active, curCam, enterGalaxy, enterSun, back, onTap, frame, speedText,
     canBack: () => S.stack.length > 0, enterPlanet, labelsRef: () => S.labels,
-    getSystem: () => S.sys, planetIndex: () => S.plIdx, land: () => land(null), setWalk: (v) => { S.walk = v; },
+    getSystem: () => S.sys, planetIndex: () => S.plIdx, scanLife, flyTo, land: () => land(null), setWalk: (v) => { S.walk = v; },
     dbg: () => ({ crCount, fauna: (S.fauna||[]).map((x) => x.kind + ':' + x.size.toFixed(4)).join(' '), h: terrainH(S.sf.s0, S.pl.seed || 1), sea: 0.3 + 0.4 * (S.pl.water || 0), seed: S.pl.seed, kind: S.pl.kind, s0: S.sf.s0 }),
     civTarget: () => (S.pl && S.pl.bio && S.pl.bio.intelligent && S.sys ? { key: S.sys.seed + ':' + S.pl.name, name: S.pl.name, real: !!S.pl.bio.real, seed: Math.floor((S.pl.seed || 1) * 1000) } : null),
     cosmosReturn: () => { S.kind = 'cosmos'; S.stack = []; clearLabels(); },
