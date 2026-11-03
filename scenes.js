@@ -918,6 +918,7 @@ function create(env) {
     Object.assign(cams.surface, { az: 0, el: 0.12, dist: 1 });
     clearLabels(); env.onEnter('surface');
     S.fauna = p.bio && p.bio.stage >= 5 ? env.life.species(p, S.sys.star, p.bio, (p.seed || 1) + 0.5) : [];
+    makeEco(p, S.sf);
     env.toast(p.name === '地球' ? '地球の地表です(生き物は手続き生成の姿で、実在の種そのものではありません)' : '地表に降り立ちました: ' + bioText(p), 5200);
   }
   // ---- 生き物と建物(地表のセルごとに、シードから決まる配置)
@@ -934,16 +935,27 @@ function create(env) {
     const p = S.pl, F = S.fauna || [], by = (k) => F.filter((x) => x.kind === k), data = new Float32Array(MAXC * 16), list = [];
     const plants = by(3), animals = by(0), birds = by(1), fish = by(2), people = by(4), lvl = S.civNow || 0;
     const cell = 0.04, R = 7, seed = Math.floor((p.seed || 1) * 1000) | 0;
+    const eco = S.eco, pfac = eco ? 0.25 + 0.75 * Math.min(1, eco.plantFrac()) : 1;
     const ci0 = Math.floor(sf.wx / cell), cj0 = Math.floor(sf.wz / cell);
     const mk = (sp, k, ci, cj) => ({ sp, key: ((ci * 73856093) ^ (cj * 19349663) ^ (k * 83492791)) | 0 });
     const add = (kind, x, z, size, sp, style, phase, head, hab, alt, wr, c1, c2, m) => (x - sf.wx) ** 2 + (z - sf.wz) ** 2 > 1.5e-4 && list.push({ m, d2: (x - sf.wx) ** 2 + (z - sf.wz) ** 2, v: [x, z, size, kind, c1[0], c1[1], c1[2], style, c2[0], c2[1], c2[2], phase, head, hab, alt, wr] });
     const pick = (arr, r) => arr[Math.floor(r * arr.length) % arr.length];
+    if (eco) {
+      const Le = eco.L;
+      for (const ind of eco.inds) {
+        const vis = eco.species[ind.sp].vis;
+        let dx = (((ind.x - Le / 2 - sf.wx + Le / 2) % Le) + Le) % Le - Le / 2, dz = (((ind.z - Le / 2 - sf.wz + Le / 2) % Le) + Le) % Le - Le / 2;
+        if (dx * dx + dz * dz > 0.3 * 0.3) continue;
+        const bird = vis.kind === 1, baseKm = vis.size * ind.g[0];
+        add(vis.kind, sf.wx + dx, sf.wz + dz, baseKm, vis, bird ? 0 : vis.legs + 10 * vis.plan, tsec * ind.g[1] * 2 + ind.id, Math.atan2(ind.vx, ind.vz), bird ? 2 : 0, bird ? 0.02 + 0.03 * ((ind.id * 37) % 10) / 10 : 0, bird ? 1.0 : 1.4, vis.col, vis.col2, { ind, eco: true });
+      }
+    }
     for (let dj = -R; dj <= R; dj++) for (let di = -R; di <= R; di++) {
       if (di * di + dj * dj > R * R) continue;
       const ci = ci0 + di, cj = cj0 + dj, r = (k) => hh(seed, ci, cj, k), X = (k) => (ci + r(k)) * cell, Z = (k) => (cj + r(k + 50)) * cell;
-      if (plants.length && r(1) < 0.45) { const sp = pick(plants, r(2)); add(3, X(3), Z(3), sp.size * (0.7 + 0.6 * r(4)), sp, sp.legs, r(5) * 6.28 + tsec * 1.2, 0, 0, 0, [0.9, 0.9, 0.85][sp.legs] || 0.9, sp.col, sp.col2); }
-      if (animals.length && r(6) < 0.05) { const sp = pick(animals, r(7)), a = tsec * 0.25 * sp.speed + r(8) * 6.28; add(0, X(9) + 0.012 * Math.sin(a), Z(9) + 0.012 * Math.cos(a), sp.size, sp, sp.legs, tsec * sp.speed * 2 + r(10) * 6, Math.atan2(Math.cos(a), -Math.sin(a)), 0, 0, 1.4, sp.col, sp.col2, mk(sp, 1, ci, cj)); }
-      if (birds.length && r(11) < 0.03) { const sp = pick(birds, r(12)), a = tsec * 0.5 * sp.speed + r(13) * 6.28; add(1, X(14) + 0.03 * Math.sin(a), Z(14) + 0.03 * Math.cos(a), sp.size, sp, 0, tsec * sp.speed * 2 + r(15) * 6, Math.atan2(Math.cos(a), -Math.sin(a)), 2, 0.02 + 0.04 * r(16), 1.0, sp.col, sp.col2, mk(sp, 2, ci, cj)); }
+      if (plants.length && r(1) < 0.45 * pfac) { const sp = pick(plants, r(2)); add(3, X(3), Z(3), sp.size * (0.7 + 0.6 * r(4)), sp, sp.legs, r(5) * 6.28 + tsec * 1.2, 0, 0, 0, [0.9, 0.9, 0.85][sp.legs] || 0.9, sp.col, sp.col2); }
+      if (!eco && animals.length && r(6) < 0.05) { const sp = pick(animals, r(7)), a = tsec * 0.25 * sp.speed + r(8) * 6.28; add(0, X(9) + 0.012 * Math.sin(a), Z(9) + 0.012 * Math.cos(a), sp.size, sp, sp.legs + 10 * (sp.plan || 0), tsec * sp.speed * 2 + r(10) * 6, Math.atan2(Math.cos(a), -Math.sin(a)), 0, 0, 1.4, sp.col, sp.col2, mk(sp, 1, ci, cj)); }
+      if (!eco && birds.length && r(11) < 0.03) { const sp = pick(birds, r(12)), a = tsec * 0.5 * sp.speed + r(13) * 6.28; add(1, X(14) + 0.03 * Math.sin(a), Z(14) + 0.03 * Math.cos(a), sp.size, sp, 0, tsec * sp.speed * 2 + r(15) * 6, Math.atan2(Math.cos(a), -Math.sin(a)), 2, 0.02 + 0.04 * r(16), 1.0, sp.col, sp.col2, mk(sp, 2, ci, cj)); }
       if (fish.length && r(17) < 0.08) { const sp = pick(fish, r(18)), a = tsec * 0.2 * sp.speed + r(19) * 6.28; add(2, X(20) + 0.008 * Math.sin(a), Z(20) + 0.008 * Math.cos(a), sp.size, sp, 0, tsec * sp.speed * 2 + r(21) * 6, Math.atan2(Math.cos(a), -Math.sin(a)), 1, 0, 1.1, sp.col, sp.col2, mk(sp, 3, ci, cj)); }
       if (people.length && lvl >= 0 && r(22) < (lvl ? 0.012 : 0.006)) { const sp = people[0], a = tsec * 0.1 + r(23) * 6.28; add(4, X(24) + 0.005 * Math.sin(a), Z(24) + 0.005 * Math.cos(a), sp.size, sp, 0, tsec * 3 + r(25) * 6, Math.atan2(Math.cos(a), -Math.sin(a)), 0, 0, 0.5, sp.col, sp.col2, mk(sp, 4, ci, cj)); }
       if (lvl >= 1 && people.length) {
@@ -963,6 +975,12 @@ function create(env) {
     const near = [];
     for (let i = list.length - 1; i >= 0 && near.length < 12; i--) {
       const e = list[i]; if (!e.m) continue;
+      if (e.m.ind) { // 生態系の個体: 本物の状態
+        const q = e.m.ind, vis = eco.species[q.sp].vis, dx = e.v[0] - sf.wx, dz = e.v[1] - sf.wz;
+        near.push({ key: q.id, name: q.name, species: vis.name, kind: vis.kind, sex: q.sex ? '♀' : '♂', age: Math.floor(q.age), energy: Math.max(0, Math.min(100, Math.round(q.e / (1.5 * 100 * q.g[0]) * 100))), act: q.act, dist: Math.round(Math.sqrt(e.d2) * 1000), bearing: Math.atan2(dx, dz),
+          genes: '大きさ' + q.g[0].toFixed(2) + ' 速さ' + q.g[1].toFixed(2) + ' 肉食度' + q.g[2].toFixed(2) + ' 群れ' + q.g[3].toFixed(2), mother: q.mother, born: Math.round(q.born), real: true });
+        continue;
+      }
       const h = (k) => hh(seed, e.m.key, k, 99), sp = e.m.sp, kind = e.v[3];
       let nm = ''; for (let t = 0; t < 2 + Math.floor(h(5) * 2); t++) nm += SYLJ[Math.floor(h(10 + t) * SYLJ.length)];
       const s4 = Math.sin(tsec * sp.speed * 0.3 + h(4) * 6);
@@ -979,6 +997,23 @@ function create(env) {
     crCount = Math.min(list.length, MAXC);
     for (let i = 0; i < crCount; i++) data.set(list[i].v, i * 16);
     device.queue.writeBuffer(crBuf, 0, data, 0, crCount * 16);
+  }
+  // ---- 生態系(eco.js)を地表に結びつける
+  function makeEco(p, sf) {
+    S.eco = null; if (!env.eco) return;
+    const animals = (S.fauna || []).filter((x) => x.kind === 0 || x.kind === 1);
+    if (!animals.length) return;
+    const R = p.radiusE * 6371, hasWater = p.kind === 'earthlike', sea = 0.3 + 0.4 * (p.water || 0), seed = p.seed || 1, Lr = env.eco.L, M = 48;
+    const mask = new Uint8Array(M * M);
+    if (hasWater) for (let j = 0; j < M; j++) for (let i = 0; i < M; i++) {
+      const x = ((i + 0.5) / M - 0.5) * Lr, z = ((j + 0.5) / M - 0.5) * Lr;
+      const d = norm3([0, 1, 2].map((k) => sf.s0[k] + (sf.Eb[k] * x + sf.Nb[k] * z) / R));
+      mask[i + j * M] = terrainH(d, seed) < sea ? 1 : 0;
+    }
+    const blocked = (x, z) => mask[Math.min(M - 1, Math.floor(x / Lr * M)) + Math.min(M - 1, Math.floor(z / Lr * M)) * M] === 1;
+    const species = animals.map((x) => ({ kind: x.kind, name: x.name, plan: x.plan || 0, legs: x.legs, col: x.col, col2: x.col2, speed: x.speed, size: x.size }));
+    S.eco = env.eco.create({ seed: Math.floor(seed * 1000) ^ astro.hashSeed(Math.floor(sf.s0[0] * 1e4), Math.floor(sf.s0[2] * 1e4)), species, blocked, cover: p.kind === 'desert' ? 0.45 : 0.85 });
+    S.ecoLog = 0;
   }
   function surfaceFrame(dt, W, H) {
     const p = S.pl, sf = S.sf, cam = cams.surface, R = p.radiusE * 6371;
@@ -1011,6 +1046,7 @@ function create(env) {
     const veg = vegOf(p), lvl = S.civNow = civLevel();
     u.set([p.tsurf || 280, greenOf(p), hasWater, sea], 40); u.set([Math.abs(sf.s0[1]), ...veg.a], 44); u.set([lvl, 0, 0, 0], 48);
     device.queue.writeBuffer(surfU, 0, u);
+    if (S.eco && env.getEcoRate) S.eco.run(env.getEcoRate() * dt);
     buildCreatures(sf, performance.now() / 1000);
   }
 
@@ -1124,7 +1160,7 @@ function create(env) {
   return {
     get kind() { return S.kind; }, active, curCam, enterGalaxy, enterSun, back, onTap, frame, speedText,
     canBack: () => S.stack.length > 0, enterPlanet, labelsRef: () => S.labels,
-    getSystem: () => S.sys, planetIndex: () => S.plIdx, nearby: () => S.near || [], follow: (k) => { S.follow = (S.follow === k ? null : k); }, following: () => S.follow, scanLife, flyTo, land: () => land(null), setWalk: (v) => { S.walk = v; },
+    getSystem: () => S.sys, planetIndex: () => S.plIdx, eco: () => S.eco, ecoEvent: (k) => { if (S.eco) S.eco.event(k, 0.6 + 0.3 * Math.random()); }, nearby: () => S.near || [], follow: (k) => { S.follow = (S.follow === k ? null : k); }, following: () => S.follow, scanLife, flyTo, land: () => land(null), setWalk: (v) => { S.walk = v; },
     dbg: () => ({ crCount, fauna: (S.fauna||[]).map((x) => x.kind + ':' + x.size.toFixed(4)).join(' '), h: terrainH(S.sf.s0, S.pl.seed || 1), sea: 0.3 + 0.4 * (S.pl.water || 0), seed: S.pl.seed, kind: S.pl.kind, s0: S.sf.s0 }),
     civTarget: () => (S.pl && S.pl.bio && S.pl.bio.intelligent && S.sys ? { key: S.sys.seed + ':' + S.pl.name, name: S.pl.name, real: !!S.pl.bio.real, seed: Math.floor((S.pl.seed || 1) * 1000) } : null),
     cosmosReturn: () => { S.kind = 'cosmos'; S.stack = []; clearLabels(); },

@@ -54,7 +54,13 @@
   .lbl { }
   #bUI { position: fixed; right: 8px; top: 50%; z-index: 30; width: 38px; height: 38px; padding: 0; border-radius: 50%; opacity: .55; font-size: 18px; }
   #bUI:hover { opacity: 1; }
-  body.hideui #info, body.hideui #opts, body.hideui #bar, body.hideui #civ, body.hideui #lifeP, body.hideui #nearP, body.hideui #markers { display: none !important; }
+  body.hideui #info, body.hideui #opts, body.hideui #bar, body.hideui #civ, body.hideui #lifeP, body.hideui #nearP, body.hideui #ecoP, body.hideui #scnP, body.hideui #markers { display: none !important; }
+  #ecoP { right: 16px; top: 64px; width: 340px; max-height: calc(100dvh - 300px); overflow-y: auto; font-size: 12px; line-height: 1.5; }
+  #ecoP .tr div { white-space: nowrap; }
+  #ecoP .lg { max-height: 120px; overflow-y: auto; margin-top: 4px; border-top: 1px solid var(--line); padding-top: 4px; }
+  #scnP { right: 16px; top: 64px; width: 380px; max-height: calc(100dvh - 300px); overflow-y: auto; font-size: 12px; line-height: 1.5; }
+  #scnP canvas { position: static; inset: auto; display: block; width: 100%; height: 130px; background: rgba(0,0,0,.25); border-radius: 6px; margin-top: 4px; }
+  #scnP table { width: 100%; border-collapse: collapse; font-size: 11px; } #scnP td { border-bottom: 1px solid rgba(127,166,255,.12); padding: 1px 3px; }
   #nearP { left: 16px; top: 300px; width: 320px; max-height: calc(100dvh - 500px); overflow-y: auto; font-size: 12px; line-height: 1.5; }
   #nearP button.hit { display: block; width: 100%; text-align: left; margin-top: 4px; }
   #nearP button.hit.on { background: var(--accent); color: #02030a; }
@@ -97,6 +103,7 @@
     #presets { display: none; }
     #note { display: none; }
     #toast { top: auto; bottom: 230px; max-width: 90vw; text-align: center; }
+    #ecoP, #scnP { left: 8px; right: 8px; top: auto; bottom: 215px; width: auto; max-height: 36vh; }
     #nearP { left: 8px; right: 8px; top: auto; bottom: 215px; width: auto; max-height: 34vh; }
     #lifeP { left: 8px; right: 8px; top: auto; bottom: 215px; width: auto; max-height: 34vh; }
     #civ { left: 8px; right: 8px; top: auto; bottom: 215px; width: auto; max-height: 34vh; }
@@ -153,6 +160,8 @@
     <button id="bLand" title="この惑星の地表に降りる" style="display:none">⬇<span class="lbl"> 着陸</span></button>
     <button id="bCiv" title="文明の実験" style="display:none">🏛<span class="lbl"> 文明</span></button>
     <button id="bNear" title="近くの生き物を一匹ずつ見る" style="display:none">🐾<span class="lbl"> 生き物</span></button>
+    <button id="bEco" title="生態系(進化・絶滅)" style="display:none">🧬<span class="lbl"> 生態系</span></button>
+    <button id="bScn" title="いまの地球からのシナリオ" style="display:none">🌍<span class="lbl"> 地球</span></button>
     <button id="bWalk" title="押している間、前に進む(PCは W/↑ キー)" style="display:none">🚶<span class="lbl"> 前進</span></button>
     <button id="bRev" title="逆再生">◀<span class="lbl"> 逆再生</span></button>
     <button id="bPause" title="一時停止">⏸</button>
@@ -184,6 +193,17 @@
     <div id="indBody" style="margin-top:4px"></div>
   </details>
 </div>
+<div id="ecoP" class="panel" style="display:none">
+  <div class="row" style="justify-content:space-between"><b>🧬 生態系(群れ・進化・絶滅)</b><button class="small" id="ecoX">✕</button></div>
+  <div style="color:var(--dim);font-size:11px">この土地(0.6km四方)の動物を一匹ずつ動かしています。餌を食べ、逃げ、追い、子を残し、遺伝子が少しずつ変わります。進化が見えるよう変異は誇張しています。確率モデル(仮説)です。</div>
+  <div class="row"><select id="ecoRate"><option value="0">停止</option><option value="2">2年/秒</option><option value="10" selected>10年/秒</option><option value="50">50年/秒</option><option value="200">200年/秒</option></select>
+    <button class="small" id="evA">☄ 隕石</button><button class="small" id="evI">❄ 氷期</button><button class="small" id="evV">🌋 噴火</button></div>
+  <div id="ecoBody"></div>
+</div>
+<div id="scnP" class="panel" style="display:none">
+  <div class="row" style="justify-content:space-between"><b>🌍 いまの地球からのシナリオ(仮説)</b><button class="small" id="scnX">✕</button></div>
+  <div id="scnBody"></div>
+</div>
 <div id="nearP" class="panel" style="display:none">
   <div class="row" style="justify-content:space-between"><b>🐾 近くの生き物(一匹ずつ)</b><button class="small" id="nearX">✕</button></div>
   <div style="color:var(--dim);font-size:11px">押すと、その個体のほうを向いて追います。状態(体力・行動)は個体の番号と時刻から決まる仮の値です。</div>
@@ -198,11 +218,13 @@
 <div id="toast"></div>
 <div id="fatal"><div id="fatalMsg"></div></div>
 
-<script src="cosmology.js?v=14"></script>
-<script src="astro.js?v=14"></script>
-<script src="life.js?v=14"></script>
-<script src="civ.js?v=14"></script>
-<script src="scenes.js?v=14"></script>
+<script src="cosmology.js?v=16"></script>
+<script src="astro.js?v=16"></script>
+<script src="life.js?v=16"></script>
+<script src="civ.js?v=16"></script>
+<script src="eco.js?v=16"></script>
+<script src="scenario.js?v=16"></script>
+<script src="scenes.js?v=16"></script>
 <script>
 (async function () {
 'use strict';
@@ -966,6 +988,7 @@ function setEventsVisible(v) { $('events').style.display = v ? '' : 'none'; $('t
 scenes = Scenes.create({
   device, ctx, canvas, format, astro: Astro, life: Life, cosmo, coarse, toast, fmtYears,
   getCiv: (key) => (civ && civKey === key ? civ : null),
+  eco: Eco, getEcoRate: () => Number($('ecoRate').value),
   getDir: () => st.dir, getMult: () => st.mult, getExpo: () => Math.pow(10, Number($('expo').value)),
   ui: { markers: $('markers') },
   setInfo(o) {
@@ -982,6 +1005,9 @@ scenes = Scenes.create({
     if (kind !== 'galaxy' && kind !== 'cosmos') $('lifeP').style.display = 'none';
     $('bWalk').style.display = kind === 'surface' ? '' : 'none';
     $('bNear').style.display = kind === 'surface' ? '' : 'none';
+    $('bEco').style.display = kind === 'surface' && scenes.eco() ? '' : 'none';
+    $('bScn').style.display = kind === 'surface' && scenes.civTarget() && scenes.civTarget().real ? '' : 'none';
+    if (kind !== 'surface') { $('ecoP').style.display = 'none'; $('scnP').style.display = 'none'; }
     if (kind !== 'surface') $('nearP').style.display = 'none';
     $('bCiv').style.display = kind === 'surface' && scenes.civTarget() ? '' : 'none';
     if (kind !== 'surface') $('civ').style.display = 'none';
@@ -1024,6 +1050,55 @@ $('bLife').onclick = async () => {
 let civFollow = null, civ = null, civKey = null, civRunning = true, civRuns = 0, civMsSeen = 0, civSeedNo = 0, civPaint = 0;
 const fmtPop = (x) => (x >= 1e8 ? (x / 1e8).toFixed(2) + '億' : x >= 1e4 ? (x / 1e4).toFixed(1) + '万' : Math.round(x).toString());
 $('bCiv').onclick = () => { const v = $('civ').style.display === 'none'; $('civ').style.display = v ? '' : 'none'; if (v) paintCiv(true); };
+// ------------------------------------------------------------------ 生態系パネル
+$('ecoX').onclick = () => { $('ecoP').style.display = 'none'; };
+$('bEco').onclick = () => { const v = $('ecoP').style.display === 'none'; $('ecoP').style.display = v ? '' : 'none'; if (v) $('scnP').style.display = 'none'; };
+$('evA').onclick = () => scenes.ecoEvent('asteroid'); $('evI').onclick = () => scenes.ecoEvent('ice'); $('evV').onclick = () => scenes.ecoEvent('volcano');
+let ecoPaint = 0;
+function paintEco() {
+  const e = scenes.eco();
+  if (!e || $('ecoP').style.display === 'none' || performance.now() - ecoPaint < 500) return;
+  ecoPaint = performance.now();
+  const s = e.stats(), KJ = { 0: '動物', 1: '鳥' };
+  const tree = e.tree().map((x) => '<div style="padding-left:' + x.depth * 12 + 'px">' + (x.ext !== null ? '<span style="color:var(--dim)">✝ ' + x.name + '(' + fmtYears(x.born) + '〜' + fmtYears(x.ext) + ')</span>' : '● <b>' + x.name + '</b> ' + x.count + '匹 <span style="color:var(--dim)">' + KJ[x.kind] + ' 大きさ' + x.size.toFixed(2) + ' 速さ' + x.speed.toFixed(2) + ' 肉食度' + x.diet.toFixed(2) + '(最大' + x.peak + '匹)</span>') + '</div>').join('');
+  const lg = e.log.slice(-14).reverse().map((l) => '<div style="' + (l.kind === 'mass' ? 'color:#f87171' : l.kind === 'spec' ? 'color:var(--accent2)' : '') + '">' + fmtYears(l.year) + ' ' + l.text + '</div>').join('');
+  $('ecoBody').innerHTML = '<div style="margin-top:6px">経過 <b>' + fmtYears(s.year) + '</b> ・ 個体 <b>' + s.n + '</b>匹 ・ 現存の種 <b>' + s.alive + '</b>(これまでに ' + s.total + ' 種、絶滅 ' + s.extinct + ') ・ 植物 ' + Math.round(e.plantFrac() * 100) + '% ・ 大量絶滅 ' + s.events + ' 回</div><div class="tr" style="margin-top:6px;overflow-x:auto"><b>系統(親 → 子)</b>' + tree + '</div><div class="lg"><b>出来事</b>' + lg + '</div>';
+}
+
+// ------------------------------------------------------------------ いまの地球シナリオ(scenario.js)
+let scnCfg = Object.assign({ metric: 'temp', seed: 0 }, Scenario.DEFAULT);
+$('scnX').onclick = () => { $('scnP').style.display = 'none'; };
+$('bScn').onclick = () => { const v = $('scnP').style.display === 'none'; $('scnP').style.display = v ? '' : 'none'; if (v) { $('ecoP').style.display = 'none'; if (!scnCfg.seed) scnCfg.seed = (Math.imul(SEED, 2654435761) >>> 0) % 1000000 + 1; paintScn(); } };
+const SCN_M = { temp: ['気温の上昇(℃)', (x) => x, '℃'], co2: ['CO₂濃度(ppm)', (x) => x, 'ppm'], pop: ['人口(億人)', (x) => x / 1e8, '億'], bio: ['野生動物の指数(1970=1)', (x) => x, ''], ai: ['AI能力の指数(2025=1・対数)', (x) => Math.log10(x), 'log10'], energy: ['エネルギー(EJ/年)', (x) => x, 'EJ'] };
+function paintScn() {
+  const el = $('scnBody'), L = scnCfg;
+  const lev = (k, lab, min, max, step) => '<label style="display:grid;grid-template-columns:8.5em 1fr 3em;gap:6px;align-items:center;margin-top:4px">' + lab + '<input type="range" data-k="' + k + '" min="' + min + '" max="' + max + '" step="' + step + '" value="' + L[k] + '"><b id="lv_' + k + '">' + Number(L[k]).toFixed(2) + '</b></label>';
+  const tbl = Scenario.NOW.map((x) => '<tr><td>' + x.label + '</td><td style="text-align:right;white-space:nowrap">' + (x.value >= 1e6 ? x.value.toExponential(2) : x.value) + ' ' + x.unit + '</td><td style="color:var(--dim)">' + x.src + '</td></tr>').join('');
+  el.innerHTML = '<div style="color:var(--dim);font-size:11px">現在の地球の統計(概数)を初期値にして、条件を変えたときの違いを比べる実験です。予測ではありません。モデルはごく単純で、数値は記憶にもとづく概数のため、正確な値は出典で確認してください。AI能力の指数は、この実験が決めた指標です。</div>'
+    + '<details><summary><b>初期値と出典(概数)</b></summary><table>' + tbl + '</table></details>'
+    + lev('emis', '脱炭素の強さ', 0, 1, 0.05) + lev('tfr', '目標の出生率', 1.2, 2.6, 0.05) + lev('ai', 'AIへの投資', 0, 1, 0.05) + lev('gov', '国際協調・統治', 0, 1, 0.05) + lev('nature', '自然保護', 0, 1, 0.05)
+    + '<div class="row" style="margin-top:6px"><select id="scnMetric">' + Object.keys(SCN_M).map((k) => '<option value="' + k + '"' + (k === L.metric ? ' selected' : '') + '>' + SCN_M[k][0] + '</option>').join('') + '</select><button class="small" id="scnSeed">🎲 乱数を変える</button><span style="color:var(--dim)">シード ' + L.seed + '</span></div>'
+    + '<canvas id="scnC" width="740" height="240"></canvas><div id="scnSum"></div>';
+  el.querySelectorAll('input[type=range]').forEach((r) => { r.oninput = () => { scnCfg[r.dataset.k] = Number(r.value); $('lv_' + r.dataset.k).textContent = Number(r.value).toFixed(2); drawScn(); }; });
+  $('scnMetric').onchange = (e) => { scnCfg.metric = e.target.value; drawScn(); };
+  $('scnSeed').onclick = () => { scnCfg.seed = 1 + Math.floor(Math.random() * 999999); paintScn(); };
+  drawScn();
+}
+function drawScn() {
+  const L = scnCfg, base = Scenario.simulate(Scenario.DEFAULT, L.seed), you = Scenario.simulate(L, L.seed), m = SCN_M[L.metric], c = $('scnC'), g = c.getContext('2d');
+  const A = base[L.metric].map(m[1]), B = you[L.metric].map(m[1]), all = A.concat(B), lo = Math.min.apply(null, all), hi = Math.max.apply(null, all), W = c.width, H = c.height;
+  g.clearRect(0, 0, W, H); g.font = '16px sans-serif';
+  const X = (i) => 40 + (W - 50) * i / (A.length - 1), Y = (v) => H - 24 - (H - 40) * (v - lo) / Math.max(1e-9, hi - lo || 1);
+  g.strokeStyle = 'rgba(127,166,255,.25)'; g.fillStyle = '#8e9bc4';
+  for (let k = 0; k <= 4; k++) { const v = lo + (hi - lo) * k / 4, y = Y(v); g.beginPath(); g.moveTo(40, y); g.lineTo(W - 10, y); g.stroke(); g.fillText(v.toFixed(v < 10 ? 1 : 0), 2, y + 5); }
+  [2025, 2100, 2200, 2300].forEach((yr) => { const x = X(yr - 2025); g.fillText(yr, x - 16, H - 4); });
+  const line = (arr, col) => { g.strokeStyle = col; g.lineWidth = 3; g.beginPath(); arr.forEach((v, i) => (i ? g.lineTo(X(i), Y(v)) : g.moveTo(X(i), Y(v)))); g.stroke(); };
+  line(A, '#8e9bc4'); line(B, '#fbbf24'); g.fillStyle = '#8e9bc4'; g.fillText('灰: いまの傾向(既定の条件)', 50, 18); g.fillStyle = '#fbbf24'; g.fillText('黄: あなたの条件', 280, 18);
+  const f = (sim, y) => { const a = Scenario.at(sim, y); return (a.pop / 1e9).toFixed(1) + '十億人 / ' + a.temp.toFixed(1) + '℃ / ' + a.co2.toFixed(0) + 'ppm / 野生動物' + a.bio.toFixed(2); };
+  const ev = you.events.filter((e, i) => i % 3 === 0).slice(0, 8).map((e) => '<div>' + e.year + '年 ' + e.text + '</div>').join('');
+  $('scnSum').innerHTML = '<table style="margin-top:6px"><tr><td></td><td>いまの傾向</td><td>あなたの条件</td></tr>' + [2050, 2100, 2200, 2300].map((y) => '<tr><td>' + y + '</td><td>' + f(base, y) + '</td><td>' + f(you, y) + '</td></tr>').join('') + '</table><div style="margin-top:4px"><b>あなたの条件で起きた出来事(一部)</b>' + ev + '</div>';
+}
+
 $('nearX').onclick = () => { $('nearP').style.display = 'none'; };
 $('bNear').onclick = () => { const v = $('nearP').style.display === 'none'; $('nearP').style.display = v ? '' : 'none'; };
 let nearPaint = 0;
@@ -1209,7 +1284,7 @@ let last = performance.now(), t0Real = last;
 function frame(now) {
   const dtReal = Math.min(0.1, (now - last) / 1000); last = now;
   const dpr = resize();
-  if (scenes.active()) { st.logMode = false; civTick(dtReal); scenes.frame(dtReal, dpr); paintNear(); requestAnimationFrame(frame); return; }
+  if (scenes.active()) { st.logMode = false; civTick(dtReal); scenes.frame(dtReal, dpr); paintNear(); paintEco(); requestAnimationFrame(frame); return; }
   if (cam.rot && ptrs.size === 0) cam.az += 0.03 * dtReal;
   st.logMode = false;
   if (st.seek !== null) {
