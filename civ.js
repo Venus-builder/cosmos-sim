@@ -37,7 +37,7 @@
     { key: 'record', jp: '記録(文字・符号)', ok: (c) => c[I] >= 1.2 },
     { key: 'agri', jp: '農耕と定住', ok: (c) => c[L] >= 1.8 },
     { key: 'metal', jp: '金属・高度な材料加工', ok: (c) => c[M] >= 2.4 },
-    { key: 'city', jp: '都市・国家のような大きな組織', ok: (c, w) => c[O] >= 2.2 && w.pop >= 3e4 },
+    { key: 'city', jp: '都市・国家のような大きな組織', ok: (c, w) => c[O] >= 2.2 && w.pop >= 600 },
     { key: 'science', jp: '体系的な科学', ok: (c) => c[S] >= 3 },
     { key: 'machine', jp: '機械・大規模なエネルギー利用', ok: (c) => c[E] >= 4 && c[M] >= 3 },
     { key: 'electric', jp: '電力', ok: (c) => c[E] >= 6 && c[S] >= 4 },
@@ -52,9 +52,9 @@
   function create(opts) {
     opts = opts || {};
     const seed = (opts.seed >>> 0) || 1, rnd = mulberry(seed ^ 0x5bd1e995);
-    const P = Object.assign({ attRate: 0.0002, base: 0.07, pop0: 260, agentsMax: 150, kLoad: 1.4e5 }, opts.params || {});
+    const P = Object.assign({ attRate: 0.0007, base: 0.07, pop0: 120, maxN: 2000, k0: 400, kLoad: 1.5e4 }, opts.params || {});
     const w = {
-      seed, year: 0, pop: P.pop0, items: [], timeline: [], ms: {}, caps: new Array(K).fill(0), over: false, collapsed: 0,
+      seed, year: 0, pop: 0, items: [], timeline: [], ms: {}, caps: new Array(K).fill(0), over: false, collapsed: 0,
       Kcap: 0, ended: false, log: (year, kind, text) => w.timeline.push({ year: Math.round(year), kind, text }),
     };
     const items = w.items, tried = new Map();
@@ -77,23 +77,31 @@
     });
     const startKnown = [0, 1, 2].map((k) => k), prims = PRIM.map((x, i) => i);
 
-    // ---- 個人(注目集団)
-    const agents = [];
-    function newAgent(parent) {
-      const a = { age: parent ? 0 : 8 + rnd() * 30, arr: [], set: new Set(), curious: 0.4 + 1.2 * rnd() };
-      if (parent) { for (const id of parent.arr) if (rnd() < 0.7) learn(a, id); }
-      else startKnown.forEach((id) => learn(a, id));
-      return a;
+    // ---- 個人: 追跡する全員が「ひとり」。名前・性別・年齢・親子・配偶者・知っている技術・生涯の記録をもつ。
+    //      (人数の上限 maxN は、注目する地域の大きさ。その外側は扱わない)
+    const agents = [], byId = new Map(), deadQ = []; let nextId = 1;
+    function note(a, text) { a.log.push({ year: Math.round(w.year), text }); if (a.log.length > 40) a.log.shift(); }
+    function newAgent(mother, father, age) {
+      const id = nextId++;
+      const a = { id, name: nameOf(seed, 20000 + id), sex: rnd() < 0.5 ? 0 : 1, age: age || 0, born: Math.round(w.year - (age || 0)), arr: [], set: new Set(), curious: 0.4 + 1.2 * rnd(),
+        mother: mother ? mother.id : -1, father: father ? father.id : -1, partner: null, kids: [], inv: 0, log: [], alive: true, died: null };
+      if (mother) { for (const k of mother.arr) if (rnd() < 0.7) learn(a, k); if (father) for (const k of father.arr) if (rnd() < 0.4) learn(a, k); }
+      else startKnown.forEach((k) => learn(a, k));
+      byId.set(id, a); return a;
     }
     function learn(a, id) { if (a.set.has(id)) return false; a.set.add(id); a.arr.push(id); items[id].holders++; return true; }
     function forget(a) { for (const id of a.arr) { const it = items[id]; if (--it.holders <= 0 && !it.rec && it.alive) { it.alive = false; lost.push(it); } } }
     const lost = [];
-    function syncAgents() {
-      const n = Math.min(P.agentsMax, Math.floor(w.pop));
-      while (agents.length < n) agents.push(newAgent(agents.length ? agents[Math.floor(rnd() * agents.length)] : null));
-      while (agents.length > n) { const i = Math.floor(rnd() * agents.length); forget(agents[i]); agents[i] = agents[agents.length - 1]; agents.pop(); }
+    function kill(i, cause) {
+      const a = agents[i];
+      a.alive = false; a.died = { year: Math.round(w.year), cause }; note(a, '死去(' + cause + '、' + Math.floor(a.age) + '歳)');
+      if (a.partner && a.partner.alive) { a.partner.partner = null; note(a.partner, '配偶者の' + a.name + 'が死去'); }
+      forget(a); a.arr = a.arr.slice(0, 12); a.set = null;
+      agents[i] = agents[agents.length - 1]; agents.pop();
+      deadQ.push(a.id); if (deadQ.length > 1500) byId.delete(deadQ.shift());
     }
-    syncAgents();
+    for (let i = 0; i < P.pop0; i++) { const a = newAgent(null, null, 5 + rnd() * 40); a.sex = i % 2; note(a, '最初の集団の一員'); agents.push(a); }
+    w.pop = agents.length;
 
     // ---- 社会の能力(生きている技術から)
     const mx = new Array(K).fill(0), sm = new Array(K).fill(0);
@@ -117,8 +125,7 @@
       if (n > 30 && rnd() < 0.5) return a.arr[n - 1 - Math.floor(rnd() * 30)];
       return a.arr[Math.floor(rnd() * n)];
     }
-    function attempt() {
-      const a = agents[Math.floor(rnd() * agents.length)];
+    function attempt(a) {
       if (rnd() < 0.03 + 0.01 * w.caps[T]) { // 探検・観察: 身の回りの別の自然現象に気づく
         if (rnd() < 0.3 && prims.length < 48) { // まだ誰も知らない自然の素材・現象を見つける(世界の乱数で性質が決まる)
           const id = items.length, c = new Array(K).fill(0), dom = h32(seed, id, 21) % K;
@@ -127,7 +134,7 @@
           capsAdd(addItem([], c, w.year, -1, nameOf(seed, 900 + id) + 'の' + NAT[h32(seed, id, 22) % NAT.length])); prims.push(id);
         }
         const unk = prims.filter((i) => !a.set.has(i));
-        if (unk.length) { const id = unk[Math.floor(rnd() * unk.length)]; learn(a, id); if (rnd() < 0.5) for (let t = 0; t < 3; t++) learn(agents[Math.floor(rnd() * agents.length)], id); }
+        if (unk.length) { const id = unk[Math.floor(rnd() * unk.length)]; learn(a, id); note(a, '新しい自然の素材・現象に気づいた: ' + items[id].name); if (rnd() < 0.5) for (let t = 0; t < 3; t++) learn(agents[Math.floor(rnd() * agents.length)], id); }
         return;
       }
       if (a.arr.length < 2) return;
@@ -154,7 +161,8 @@
         const jump = keep * -Math.log(1 - u01.apply(null, [seed, 3, d].concat(ids))) * (0.18 + 0.05 * depth);
         c[d] = 0.62 * mxv + 0.22 * sm / ps.length + jump;
       }
-      const it = addItem(ids, c, w.year, 0, null);
+      const it = addItem(ids, c, w.year, a.id, null);
+      a.inv++; note(a, '【発明】' + it.name);
       tried.set(key, 1e9);
       learn(a, it.id);
       for (let t = 0; t < 3; t++) learn(agents[Math.floor(rnd() * agents.length)], it.id);
@@ -170,56 +178,79 @@
       if (w.ended) return;
       const c = w.caps;
       w.year += dt;
-      // 人口(ロジスティック)。収容力は農・医・エネルギー・輸送・社会の力で上がる
-      w.Kcap = 2500 * Math.exp(0.55 * c[L] + 0.35 * c[E] + 0.2 * c[T] + 0.2 * c[O] + 0.15 * c[M]);
-      w.pop = Math.max(0, w.pop + w.pop * Math.min(0.3, 0.01 * dt) * (1 - w.pop / w.Kcap));
-      syncAgents();
-      if (agents.length < 8) { w.ended = true; w.log(w.year, 'end', '人口が減りすぎて、文明は途絶えた'); return; }
-      // 発明の試み
+      w.Kcap = Math.min(P.maxN, P.k0 * Math.exp(0.9 * c[L] + 0.5 * c[E] + 0.3 * c[T] + 0.3 * c[O] + 0.2 * c[M]));
+      // 発明の試み(個人がそれぞれ、知っている技術を組み合わせて試す)
       const mult = 1 + 0.35 * c[I] + 0.15 * c[S] + 0.1 * c[O];
-      let nAtt = Math.min(20 * dt, w.pop * P.attRate * dt * mult);
-      let whole = Math.floor(nAtt); if (rnd() < nAtt - whole) whole++;
-      for (let i = 0; i < whole; i++) attempt();
-      // 個人間の知識の伝達と、書き残された知識の学習
+      const rate = P.attRate * (1 + (w.aliveN || 0) / 40) * mult * dt;
+      const n0 = agents.length;
+      for (let i = 0; i < n0; i++) {
+        const a = agents[i]; if (a.age < 8) continue;
+        const x = rate * a.curious; let k = Math.floor(x); if (rnd() < x - k) k++;
+        for (let t = 0; t < k; t++) attempt(a);
+      }
+      // 知識の伝達(人から人へ)と、書き残された知識の学習
       const contacts = Math.min(4, 1 + Math.floor(0.5 * c[O] + 0.3 * c[T]));
       const learnP = Math.min(0.9, 0.06 * dt);
+      const libP = Math.min(0.9, 0.02 * dt * (0.5 + c[I]));
       for (const a of agents) {
         for (let k = 0; k < contacts; k++) {
           const b = agents[Math.floor(rnd() * agents.length)];
           if (b === a || !b.arr.length) continue;
-          const id = b.arr[Math.floor(rnd() * b.arr.length)];
-          if (rnd() < learnP) learn(a, id);
+          if (rnd() < learnP) learn(a, b.arr[Math.floor(rnd() * b.arr.length)]);
         }
-        if (lib.length && rnd() < Math.min(0.9, 0.02 * dt * (0.5 + c[I]))) learn(a, lib[Math.floor(rnd() * lib.length)]);
+        if (lib.length && rnd() < libP) learn(a, lib[Math.floor(rnd() * lib.length)]);
         a.age += dt;
       }
-      // 世代交代(寿命は生命の力で伸びる)。亡くなる個人と共に、書き残されていない知識が消えることがある
-      const life = 35 + 40 * (1 - Math.exp(-c[L] / 4));
-      for (let i = 0; i < agents.length; i++) {
-        const a = agents[i];
-        if (rnd() < 1 - Math.exp(-dt * Math.pow(a.age / life, 6) * 0.5 - dt * 0.004)) {
-          const par = agents[Math.floor(rnd() * agents.length)];
-          forget(a); agents[i] = newAgent(par);
+      // 結婚(独り身の大人どうし)
+      const single = agents.filter((a) => !a.partner && a.age >= 16 && a.age <= 55);
+      const pp = Math.min(0.6, 0.25 * dt);
+      for (const a of single) {
+        if (a.partner || rnd() > pp) continue;
+        for (let t = 0; t < 6; t++) {
+          const b = single[Math.floor(rnd() * single.length)];
+          if (b === a || b.partner || b.sex === a.sex || b.id === a.mother || b.id === a.father || a.id === b.mother || a.id === b.father) continue;
+          a.partner = b; b.partner = a; note(a, b.name + 'と結婚'); note(b, a.name + 'と結婚'); break;
         }
       }
+      // 出産(母親ごとに、その期間に生まれる子の数を決める)。生まれた子も、すぐに「ひとり」として追跡される
+      const room = Math.max(0, 1 - agents.length / w.Kcap), n1 = agents.length;
+      for (let i = 0; i < n1 && agents.length < P.maxN; i++) {
+        const m = agents[i]; if (m.sex !== 1 || !m.partner || m.age < 16 || m.age - dt > 42) continue;
+        const x = 0.13 * dt * room * Math.min(1, (42 - Math.max(16, m.age - dt)) / dt); let k = Math.floor(x); if (rnd() < x - k) k++;
+        for (let t = 0; t < Math.min(k, 4) && agents.length < P.maxN; t++) {
+          const f = m.partner, kid = newAgent(m, f, dt * rnd() * 0.9);
+          m.kids.push(kid.id); f.kids.push(kid.id); note(m, '子の' + kid.name + 'が誕生'); note(f, '子の' + kid.name + 'が誕生'); note(kid, '誕生(母: ' + m.name + '、父: ' + f.name + ')');
+          agents.push(kid);
+        }
+      }
+      // 死亡(寿命は生命の力で伸びる。人が多すぎると食料が足りず死亡が増える)
+      const life = 58 + 25 * (1 - Math.exp(-c[L] / 4)), crowd = 0.03 * Math.max(0, agents.length / w.Kcap - 1);
+      for (let i = agents.length - 1; i >= 0; i--) {
+        const a = agents[i];
+        const h = 0.004 + 0.5 * Math.pow(a.age / life, 6) + (a.age < 5 ? 0.012 : 0) + crowd;
+        if (rnd() < 1 - Math.exp(-h * dt)) kill(i, a.age / life > 0.8 ? '老衰' : crowd > 0.002 ? '飢え' : '病気・事故');
+      }
       if (lost.length) { for (const it of lost.splice(0)) if (it.depth >= 8) w.log(w.year, 'lost', '失われた技術: ' + it.name); recomputeCaps(); }
+      w.pop = agents.length;
+      if (agents.length < 6) { w.ended = true; w.log(w.year, 'end', '人口が減りすぎて、文明は途絶えた'); return; }
       // 危機(疫病・戦乱・災害・環境の限界)
       const load = w.pop * Math.pow(0.2 + c[E], 1.3) / (P.kLoad * loadScale) / (1 + 0.35 * c[S]);
-      const dens = w.pop / 1e5;
-      const hz = [3e-5 + 4e-5 * dens * (1 - 0.15 * c[L]), 2e-5 * (1 + c[M] + c[E]) * (1 - 0.3 * Math.min(2, c[O]) / 2), 3e-5, 0.0008 * Math.max(0, load - 1)];
+      const dens = w.pop / P.maxN;
+      const hz = [1e-4 + 2e-4 * dens * (1 - 0.15 * c[L]), 6e-5 * (1 + c[M] + c[E]) * (1 - 0.3 * Math.min(2, c[O]) / 2), 8e-5, 0.0008 * Math.max(0, load - 1)];
       const names = ['疫病の流行', '大きな戦乱', '天変地異', '環境・資源の限界'];
       for (let k = 0; k < 4; k++) if (rnd() < 1 - Math.exp(-hz[k] * dt)) {
-        const sev = 0.25 + 0.55 * rnd();
-        w.pop *= sev; w.collapsed++;
-        if (sev < 0.6) w.log(w.year, 'crisis', '【危機】' + names[k] + ': 人口が ' + Math.round((1 - sev) * 100) + '% 減少');
+        const sev = 0.25 + 0.55 * rnd(); let died = 0;
+        for (let i = agents.length - 1; i >= 0 && agents.length > 6; i--) if (rnd() > sev) { kill(i, names[k]); died++; }
+        w.collapsed++;
+        if (sev < 0.6) w.log(w.year, 'crisis', '【危機】' + names[k] + ': ' + died + '人が亡くなった');
         for (const it of items) if (it.alive && !it.rec && rnd() < 0.15 && it.depth > 2) { it.alive = false; if (it.depth >= 8) w.log(w.year, 'lost', '失われた技術: ' + it.name); }
-        recomputeCaps();
+        recomputeCaps(); w.pop = agents.length;
         break;
       }
       checkMilestones(null);
     }
     // 推奨の刻み幅(年)。技術が増えるほど細かく
-    function stepSize() { return w.caps[I] >= 6 ? 8 : 25; }
+    function stepSize() { return w.caps[I] >= 6 ? 2 : 5; }
     function summary() { return { year: w.year, pop: w.pop, items: items.filter((x) => x.alive).length, total: items.length, caps: w.caps.slice(), ms: Object.assign({}, w.ms), collapsed: w.collapsed, ended: w.ended }; }
     // ---- プログラム: 小さなスタックマシン。命令の名前は、この世界の「情報」系の技術名から付く。実際に実行して出力を得る。
     const OPS = [['PUSH', '値を積む'], ['ADD', '足す'], ['SUB', '引く'], ['MUL', '掛ける'], ['DUP', '複製する'], ['SWAP', '入れ替える'], ['OVER', '2番目を複製'], ['ROT', '3つを回す'], ['POP', '捨てる'], ['JZ', '0ならジャンプ'], ['JMP', 'ジャンプ'], ['PRINT', '出力する'], ['HALT', '停止']];
@@ -254,9 +285,28 @@
         return { title: t.title, out, code: t.code.map(([op, a], addr) => ({ addr, name: names[op], meaning: OPS.find((o) => o[0] === op)[1], arg: a })) };
       });
     }
-    function individuals() {
-      return agents.slice(0, 5).map((a) => ({ age: Math.floor(a.age), known: a.arr.length, best: a.arr.slice().sort((x, y) => items[y].depth - items[x].depth).slice(0, 3).map((id) => items[id].name) }));
+    function brief(id) { const a = byId.get(id); return a ? { id: a.id, name: a.name, alive: a.alive } : (id >= 0 ? { id, name: '(記録なし)', alive: false } : null); }
+    function person(id) {
+      const a = byId.get(id); if (!a) return null;
+      const best = a.arr.slice().sort((x, y) => items[y].depth - items[x].depth).slice(0, 4).map((k) => items[k].name);
+      return { id: a.id, name: a.name, sex: a.sex ? '女' : '男', age: Math.floor(a.age), born: a.born, alive: a.alive, died: a.died, mother: brief(a.mother), father: brief(a.father),
+        partner: a.partner ? { id: a.partner.id, name: a.partner.name, alive: a.partner.alive } : null, kids: a.kids.slice(0, 20).map(brief), inv: a.inv, known: a.arr.length, best, log: a.log.slice(-25) };
     }
+    // 追う個人の候補: 最多の発明者 / 最年長 / 最近生まれた人 / 子の多い人 / ランダム
+    function pickPerson(kind) {
+      const all = []; for (const a of byId.values()) all.push(a);
+      const alive = agents;
+      if (!alive.length) return null;
+      let pick;
+      if (kind === 'inventor') pick = all.reduce((m, a) => (a.inv > (m ? m.inv : -1) ? a : m), null);
+      else if (kind === 'oldest') pick = alive.reduce((m, a) => (a.age > m.age ? a : m), alive[0]);
+      else if (kind === 'newest') pick = alive.reduce((m, a) => (a.age < m.age ? a : m), alive[0]);
+      else if (kind === 'parent') pick = all.reduce((m, a) => (a.kids.length > (m ? m.kids.length : -1) ? a : m), null);
+      else pick = alive[Math.floor(rnd() * alive.length)];
+      return pick ? pick.id : null;
+    }
+    function individuals() { return agents.slice(0, 5).map((a) => ({ age: Math.floor(a.age), known: a.arr.length, best: [] })); }
+    w.person = person; w.pickPerson = pickPerson;
     w.programs = programs; w.individuals = individuals; w.runVM = runVM;
     w.step = step; w.stepSize = stepSize; w.summary = summary; w.MILESTONES = MILESTONES; w.DIM_JP = DIM_JP;
     return w;

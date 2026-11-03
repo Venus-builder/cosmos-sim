@@ -913,6 +913,7 @@ function create(env) {
   function enterSurface(s0) {
     const p = S.pl, b = basisAt(s0);
     S.kind = 'surface'; S.stack.push('planet');
+    S.follow = null; S.near = [];
     S.sf = { s0, Eb: b.E, Nb: b.N, wx: 0, wz: 0, sel: 0, lat: b.lat, lon: b.lon, hd: 0 };
     Object.assign(cams.surface, { az: 0, el: 0.12, dist: 1 });
     clearLabels(); env.onEnter('surface');
@@ -934,16 +935,17 @@ function create(env) {
     const plants = by(3), animals = by(0), birds = by(1), fish = by(2), people = by(4), lvl = S.civNow || 0;
     const cell = 0.04, R = 7, seed = Math.floor((p.seed || 1) * 1000) | 0;
     const ci0 = Math.floor(sf.wx / cell), cj0 = Math.floor(sf.wz / cell);
-    const add = (kind, x, z, size, sp, style, phase, head, hab, alt, wr, c1, c2) => (x - sf.wx) ** 2 + (z - sf.wz) ** 2 > 1.5e-4 && list.push({ d2: (x - sf.wx) ** 2 + (z - sf.wz) ** 2, v: [x, z, size, kind, c1[0], c1[1], c1[2], style, c2[0], c2[1], c2[2], phase, head, hab, alt, wr] });
+    const mk = (sp, k, ci, cj) => ({ sp, key: ((ci * 73856093) ^ (cj * 19349663) ^ (k * 83492791)) | 0 });
+    const add = (kind, x, z, size, sp, style, phase, head, hab, alt, wr, c1, c2, m) => (x - sf.wx) ** 2 + (z - sf.wz) ** 2 > 1.5e-4 && list.push({ m, d2: (x - sf.wx) ** 2 + (z - sf.wz) ** 2, v: [x, z, size, kind, c1[0], c1[1], c1[2], style, c2[0], c2[1], c2[2], phase, head, hab, alt, wr] });
     const pick = (arr, r) => arr[Math.floor(r * arr.length) % arr.length];
     for (let dj = -R; dj <= R; dj++) for (let di = -R; di <= R; di++) {
       if (di * di + dj * dj > R * R) continue;
       const ci = ci0 + di, cj = cj0 + dj, r = (k) => hh(seed, ci, cj, k), X = (k) => (ci + r(k)) * cell, Z = (k) => (cj + r(k + 50)) * cell;
       if (plants.length && r(1) < 0.45) { const sp = pick(plants, r(2)); add(3, X(3), Z(3), sp.size * (0.7 + 0.6 * r(4)), sp, sp.legs, r(5) * 6.28 + tsec * 1.2, 0, 0, 0, [0.9, 0.9, 0.85][sp.legs] || 0.9, sp.col, sp.col2); }
-      if (animals.length && r(6) < 0.05) { const sp = pick(animals, r(7)), a = tsec * 0.25 * sp.speed + r(8) * 6.28; add(0, X(9) + 0.012 * Math.sin(a), Z(9) + 0.012 * Math.cos(a), sp.size, sp, sp.legs, tsec * sp.speed * 2 + r(10) * 6, Math.atan2(Math.cos(a), -Math.sin(a)), 0, 0, 1.4, sp.col, sp.col2); }
-      if (birds.length && r(11) < 0.03) { const sp = pick(birds, r(12)), a = tsec * 0.5 * sp.speed + r(13) * 6.28; add(1, X(14) + 0.03 * Math.sin(a), Z(14) + 0.03 * Math.cos(a), sp.size, sp, 0, tsec * sp.speed * 2 + r(15) * 6, Math.atan2(Math.cos(a), -Math.sin(a)), 2, 0.02 + 0.04 * r(16), 1.0, sp.col, sp.col2); }
-      if (fish.length && r(17) < 0.08) { const sp = pick(fish, r(18)), a = tsec * 0.2 * sp.speed + r(19) * 6.28; add(2, X(20) + 0.008 * Math.sin(a), Z(20) + 0.008 * Math.cos(a), sp.size, sp, 0, tsec * sp.speed * 2 + r(21) * 6, Math.atan2(Math.cos(a), -Math.sin(a)), 1, 0, 1.1, sp.col, sp.col2); }
-      if (people.length && lvl >= 0 && r(22) < (lvl ? 0.012 : 0.006)) { const sp = people[0], a = tsec * 0.1 + r(23) * 6.28; add(4, X(24) + 0.005 * Math.sin(a), Z(24) + 0.005 * Math.cos(a), sp.size, sp, 0, tsec * 3 + r(25) * 6, Math.atan2(Math.cos(a), -Math.sin(a)), 0, 0, 0.5, sp.col, sp.col2); }
+      if (animals.length && r(6) < 0.05) { const sp = pick(animals, r(7)), a = tsec * 0.25 * sp.speed + r(8) * 6.28; add(0, X(9) + 0.012 * Math.sin(a), Z(9) + 0.012 * Math.cos(a), sp.size, sp, sp.legs, tsec * sp.speed * 2 + r(10) * 6, Math.atan2(Math.cos(a), -Math.sin(a)), 0, 0, 1.4, sp.col, sp.col2, mk(sp, 1, ci, cj)); }
+      if (birds.length && r(11) < 0.03) { const sp = pick(birds, r(12)), a = tsec * 0.5 * sp.speed + r(13) * 6.28; add(1, X(14) + 0.03 * Math.sin(a), Z(14) + 0.03 * Math.cos(a), sp.size, sp, 0, tsec * sp.speed * 2 + r(15) * 6, Math.atan2(Math.cos(a), -Math.sin(a)), 2, 0.02 + 0.04 * r(16), 1.0, sp.col, sp.col2, mk(sp, 2, ci, cj)); }
+      if (fish.length && r(17) < 0.08) { const sp = pick(fish, r(18)), a = tsec * 0.2 * sp.speed + r(19) * 6.28; add(2, X(20) + 0.008 * Math.sin(a), Z(20) + 0.008 * Math.cos(a), sp.size, sp, 0, tsec * sp.speed * 2 + r(21) * 6, Math.atan2(Math.cos(a), -Math.sin(a)), 1, 0, 1.1, sp.col, sp.col2, mk(sp, 3, ci, cj)); }
+      if (people.length && lvl >= 0 && r(22) < (lvl ? 0.012 : 0.006)) { const sp = people[0], a = tsec * 0.1 + r(23) * 6.28; add(4, X(24) + 0.005 * Math.sin(a), Z(24) + 0.005 * Math.cos(a), sp.size, sp, 0, tsec * 3 + r(25) * 6, Math.atan2(Math.cos(a), -Math.sin(a)), 0, 0, 0.5, sp.col, sp.col2, mk(sp, 4, ci, cj)); }
       if (lvl >= 1 && people.length) {
         const wall = [[0.62, 0.5, 0.36], [0.72, 0.68, 0.6], [0.55, 0.58, 0.62], [0.7, 0.74, 0.78]], roof = [[0.42, 0.3, 0.16], [0.55, 0.25, 0.2], [0.3, 0.3, 0.32], [0.3, 0.35, 0.4]];
         const town = smoothstep01(0.5, 0.62, noise3js((ci + 0.5) * cell * 0.8, (cj + 0.5) * cell * 0.8, 11)), core = smoothstep01(0.6, 0.7, noise3js((ci + 0.5) * cell * 0.8, (cj + 0.5) * cell * 0.8, 11));
@@ -956,6 +958,24 @@ function create(env) {
       }
     }
     list.sort((a, b) => b.d2 - a.d2);
+    // ---- 近くの生き物を「一匹ずつ」の個体として扱う(名前・性別・年齢・体力・行動)。状態は個体の番号と時刻から決まる。
+    const SYLJ = 'カキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモラリルレロ';
+    const near = [];
+    for (let i = list.length - 1; i >= 0 && near.length < 12; i--) {
+      const e = list[i]; if (!e.m) continue;
+      const h = (k) => hh(seed, e.m.key, k, 99), sp = e.m.sp, kind = e.v[3];
+      let nm = ''; for (let t = 0; t < 2 + Math.floor(h(5) * 2); t++) nm += SYLJ[Math.floor(h(10 + t) * SYLJ.length)];
+      const s4 = Math.sin(tsec * sp.speed * 0.3 + h(4) * 6);
+      const act = kind === 2 ? '泳いでいる' : kind === 1 ? '飛んでいる' : s4 > 0.3 ? '歩いている' : s4 < -0.6 ? '食べている' : '休んでいる';
+      const dx = e.v[0] - sf.wx, dz = e.v[1] - sf.wz;
+      near.push({ key: e.m.key, name: nm, species: sp.name, kind, sex: h(1) < 0.5 ? '♂' : '♀', age: Math.floor(h(2) * (kind === 4 ? 60 : kind === 1 ? 8 : 15) + 1), energy: Math.round(45 + 50 * (0.5 + 0.5 * Math.sin(tsec * 0.05 + h(3) * 6))), act, dist: Math.round(Math.sqrt(e.d2) * 1000), bearing: Math.atan2(dx, dz) });
+    }
+    S.near = near;
+    if (S.follow !== null && S.follow !== undefined) {
+      const f = near.find((x) => x.key === S.follow);
+      if (!f) S.follow = null;
+      else { const cam = cams.surface; let d = f.bearing - cam.az; d = ((d + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI; cam.az += d * 0.12; cam.el += (0.05 - cam.el) * 0.1; }
+    }
     crCount = Math.min(list.length, MAXC);
     for (let i = 0; i < crCount; i++) data.set(list[i].v, i * 16);
     device.queue.writeBuffer(crBuf, 0, data, 0, crCount * 16);
@@ -1104,7 +1124,7 @@ function create(env) {
   return {
     get kind() { return S.kind; }, active, curCam, enterGalaxy, enterSun, back, onTap, frame, speedText,
     canBack: () => S.stack.length > 0, enterPlanet, labelsRef: () => S.labels,
-    getSystem: () => S.sys, planetIndex: () => S.plIdx, scanLife, flyTo, land: () => land(null), setWalk: (v) => { S.walk = v; },
+    getSystem: () => S.sys, planetIndex: () => S.plIdx, nearby: () => S.near || [], follow: (k) => { S.follow = (S.follow === k ? null : k); }, following: () => S.follow, scanLife, flyTo, land: () => land(null), setWalk: (v) => { S.walk = v; },
     dbg: () => ({ crCount, fauna: (S.fauna||[]).map((x) => x.kind + ':' + x.size.toFixed(4)).join(' '), h: terrainH(S.sf.s0, S.pl.seed || 1), sea: 0.3 + 0.4 * (S.pl.water || 0), seed: S.pl.seed, kind: S.pl.kind, s0: S.sf.s0 }),
     civTarget: () => (S.pl && S.pl.bio && S.pl.bio.intelligent && S.sys ? { key: S.sys.seed + ':' + S.pl.name, name: S.pl.name, real: !!S.pl.bio.real, seed: Math.floor((S.pl.seed || 1) * 1000) } : null),
     cosmosReturn: () => { S.kind = 'cosmos'; S.stack = []; clearLabels(); },

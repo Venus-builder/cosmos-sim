@@ -54,7 +54,10 @@
   .lbl { }
   #bUI { position: fixed; right: 8px; top: 50%; z-index: 30; width: 38px; height: 38px; padding: 0; border-radius: 50%; opacity: .55; font-size: 18px; }
   #bUI:hover { opacity: 1; }
-  body.hideui #info, body.hideui #opts, body.hideui #bar, body.hideui #civ, body.hideui #lifeP, body.hideui #markers { display: none !important; }
+  body.hideui #info, body.hideui #opts, body.hideui #bar, body.hideui #civ, body.hideui #lifeP, body.hideui #nearP, body.hideui #markers { display: none !important; }
+  #nearP { left: 16px; top: 300px; width: 320px; max-height: calc(100dvh - 500px); overflow-y: auto; font-size: 12px; line-height: 1.5; }
+  #nearP button.hit { display: block; width: 100%; text-align: left; margin-top: 4px; }
+  #nearP button.hit.on { background: var(--accent); color: #02030a; }
   #lifeP { left: 16px; top: 250px; width: 300px; max-height: calc(100dvh - 450px); overflow-y: auto; font-size: 12px; line-height: 1.5; }
   #lifeP button.hit { display: block; width: 100%; text-align: left; margin-top: 4px; }
   #civ pre { margin: 4px 0; font-size: 11px; line-height: 1.35; white-space: pre-wrap; color: var(--fg); }
@@ -94,6 +97,7 @@
     #presets { display: none; }
     #note { display: none; }
     #toast { top: auto; bottom: 230px; max-width: 90vw; text-align: center; }
+    #nearP { left: 8px; right: 8px; top: auto; bottom: 215px; width: auto; max-height: 34vh; }
     #lifeP { left: 8px; right: 8px; top: auto; bottom: 215px; width: auto; max-height: 34vh; }
     #civ { left: 8px; right: 8px; top: auto; bottom: 215px; width: auto; max-height: 34vh; }
     #bUI { top: 46%; }
@@ -148,6 +152,7 @@
     <button id="bLife" title="生命のいる惑星を探して、そこへ飛ぶ">🌱<span class="lbl"> 生命を探す</span></button>
     <button id="bLand" title="この惑星の地表に降りる" style="display:none">⬇<span class="lbl"> 着陸</span></button>
     <button id="bCiv" title="文明の実験" style="display:none">🏛<span class="lbl"> 文明</span></button>
+    <button id="bNear" title="近くの生き物を一匹ずつ見る" style="display:none">🐾<span class="lbl"> 生き物</span></button>
     <button id="bWalk" title="押している間、前に進む(PCは W/↑ キー)" style="display:none">🚶<span class="lbl"> 前進</span></button>
     <button id="bRev" title="逆再生">◀<span class="lbl"> 逆再生</span></button>
     <button id="bPause" title="一時停止">⏸</button>
@@ -170,10 +175,19 @@
 <button id="bUI" title="画面の表示/非表示(Hキー)">👁</button>
 <div id="civ" class="panel" style="display:none">
   <div class="row" style="justify-content:space-between"><b>🏛 文明の実験(仮説)</b><button class="small" id="civX">✕</button></div>
-  <div style="color:var(--dim);font-size:11px">知的生命の小さな集団から、個人どうしが技術を組み合わせて試す世界を動かします。順番・時期・中身は世界ごとの乱数で決まり、筋書きはありません(「計算機」などの名前は、能力の水準から後付け)。実際の人類史でも未来の予測でもありません。</div>
+  <div style="color:var(--dim);font-size:11px">知的生命の小さな集団を動かします。集団の全員が「ひとり」ずつの個人で、結婚・出産・死亡をし、知っている技術を組み合わせて試し、人から人へ教え合います(追跡する人数の上限は2000人=注目する地域の大きさ)。順番・時期・中身は世界ごとの乱数で決まり、筋書きはありません(「計算機」などの名前は、能力の水準から後付け)。実際の人類史でも未来の予測でもありません。</div>
   <div class="row"><button class="small" id="civGo">▶ 新しい世界で始める</button><button class="small" id="civPause">⏸</button>
     <select id="civSpeed"><option value="100">100年/秒</option><option value="1000" selected>1000年/秒</option><option value="10000">1万年/秒</option><option value="100000">10万年/秒</option></select></div>
   <div id="civBody"></div>
+  <details id="civInd" open style="margin-top:6px"><summary><b>👤 ひとりずつ追う(全員が個人)</b></summary>
+    <div class="row" style="margin-top:4px"><select id="indKind"><option value="oldest">最年長</option><option value="inventor">最多の発明者</option><option value="parent">子の多い人</option><option value="newest">最近生まれた人</option><option value="random">ランダム</option></select><button class="small" id="indGo">この人を追う</button></div>
+    <div id="indBody" style="margin-top:4px"></div>
+  </details>
+</div>
+<div id="nearP" class="panel" style="display:none">
+  <div class="row" style="justify-content:space-between"><b>🐾 近くの生き物(一匹ずつ)</b><button class="small" id="nearX">✕</button></div>
+  <div style="color:var(--dim);font-size:11px">押すと、その個体のほうを向いて追います。状態(体力・行動)は個体の番号と時刻から決まる仮の値です。</div>
+  <div id="nearBody"></div>
 </div>
 <div id="lifeP" class="panel" style="display:none">
   <div class="row" style="justify-content:space-between"><b>🌱 生命のいる惑星</b><button class="small" id="lifeX">✕</button></div>
@@ -184,11 +198,11 @@
 <div id="toast"></div>
 <div id="fatal"><div id="fatalMsg"></div></div>
 
-<script src="cosmology.js?v=12"></script>
-<script src="astro.js?v=12"></script>
-<script src="life.js?v=12"></script>
-<script src="civ.js?v=12"></script>
-<script src="scenes.js?v=12"></script>
+<script src="cosmology.js?v=14"></script>
+<script src="astro.js?v=14"></script>
+<script src="life.js?v=14"></script>
+<script src="civ.js?v=14"></script>
+<script src="scenes.js?v=14"></script>
 <script>
 (async function () {
 'use strict';
@@ -967,6 +981,8 @@ scenes = Scenes.create({
     $('bLife').style.display = kind === 'cosmos' || kind === 'galaxy' ? '' : 'none';
     if (kind !== 'galaxy' && kind !== 'cosmos') $('lifeP').style.display = 'none';
     $('bWalk').style.display = kind === 'surface' ? '' : 'none';
+    $('bNear').style.display = kind === 'surface' ? '' : 'none';
+    if (kind !== 'surface') $('nearP').style.display = 'none';
     $('bCiv').style.display = kind === 'surface' && scenes.civTarget() ? '' : 'none';
     if (kind !== 'surface') $('civ').style.display = 'none';
     if (kind === 'cosmos') { $('dl').style.display = ''; $('dl2').style.display = 'none'; $('bBack').style.display = 'none'; $('bZoom').style.display = ''; setEventsVisible(true); setDir(savedDir); }
@@ -1005,15 +1021,47 @@ $('bLife').onclick = async () => {
 };
 
 // ------------------------------------------------------------------ 文明の実験(civ.js)
-let civ = null, civKey = null, civRunning = true, civRuns = 0, civMsSeen = 0, civSeedNo = 0, civPaint = 0;
+let civFollow = null, civ = null, civKey = null, civRunning = true, civRuns = 0, civMsSeen = 0, civSeedNo = 0, civPaint = 0;
 const fmtPop = (x) => (x >= 1e8 ? (x / 1e8).toFixed(2) + '億' : x >= 1e4 ? (x / 1e4).toFixed(1) + '万' : Math.round(x).toString());
 $('bCiv').onclick = () => { const v = $('civ').style.display === 'none'; $('civ').style.display = v ? '' : 'none'; if (v) paintCiv(true); };
+$('nearX').onclick = () => { $('nearP').style.display = 'none'; };
+$('bNear').onclick = () => { const v = $('nearP').style.display === 'none'; $('nearP').style.display = v ? '' : 'none'; };
+let nearPaint = 0;
+function paintNear() {
+  if ($('nearP').style.display === 'none' || performance.now() - nearPaint < 400) return;
+  nearPaint = performance.now();
+  const el = $('nearBody'), list = scenes.nearby(), fol = scenes.following();
+  el.innerHTML = '';
+  if (!list.length) { el.textContent = 'この近くに生き物はいません'; return; }
+  const KJ = { 0: '動物', 1: '鳥', 2: '水の生物', 4: '知的生命' };
+  list.forEach((x) => {
+    const b = document.createElement('button'); b.className = 'small hit' + (fol === x.key ? ' on' : '');
+    b.textContent = (KJ[x.kind] || '') + ' ' + x.name + '(' + x.species + ') ' + x.sex + ' ' + x.age + '歳 ・ ' + x.dist + 'm ・ ' + x.act + ' ・ 体力 ' + x.energy + '%';
+    b.onclick = () => { scenes.follow(x.key); nearPaint = 0; paintNear(); };
+    el.appendChild(b);
+  });
+}
 $('civX').onclick = () => { $('civ').style.display = 'none'; };
+$('indGo').onclick = () => { if (civ) { civFollow = civ.pickPerson($('indKind').value); paintCiv(true); } };
+$('indBody').onclick = (e) => { const b = e.target.closest('[data-id]'); if (b && civ) { civFollow = Number(b.dataset.id); paintCiv(true); } };
+function paintPerson() {
+  const el = $('indBody');
+  if (!civ) { el.textContent = ''; return; }
+  const p = civFollow !== null ? civ.person(civFollow) : null;
+  if (!p) { el.innerHTML = '<span style="color:var(--dim)">追う人を選んでください(記録が残っていない人は表示できません)</span>'; return; }
+  const link = (x) => (x ? '<button class="small" data-id="' + x.id + '">' + x.name + (x.alive ? '' : '(故人)') + '</button>' : 'なし');
+  const status = p.alive ? p.age + '歳・存命' : (p.died.year - p.born) + '歳で' + p.died.cause + '(' + fmtYears(p.died.year) + ')';
+  el.innerHTML = '<div><b style="font-size:14px">' + p.name + '</b> (' + p.sex + ') ' + status + ' ・ 生まれ ' + fmtYears(p.born) + '</div>'
+    + '<div>親: ' + link(p.mother) + ' ' + link(p.father) + ' ・ 配偶者: ' + link(p.partner) + '</div>'
+    + '<div>子(' + p.kids.length + '人): ' + (p.kids.slice(0, 8).map(link).join(' ') || 'なし') + '</div>'
+    + '<div>発明 ' + p.inv + ' 件 ・ 知っている技術 ' + p.known + ' 個(深い技術: ' + (p.best.join('、') || 'なし') + ')</div>'
+    + '<div class="tl" style="max-height:140px">' + p.log.slice().reverse().map((l) => '<div>' + fmtYears(l.year) + ' ' + l.text + '</div>').join('') + '</div>';
+}
 $('civPause').onclick = () => { civRunning = !civRunning; $('civPause').textContent = civRunning ? '⏸' : '▶'; };
 $('civGo').onclick = () => {
   const t = scenes.civTarget(); if (!t) return;
   civRuns++; civSeedNo = (Math.imul(SEED, 2654435761) ^ Math.imul(t.seed + 1, 40503) ^ civRuns * 7919) >>> 0;
-  civ = Civ.create({ seed: civSeedNo }); civKey = t.key; civMsSeen = 0; civRunning = true; $('civPause').textContent = '⏸';
+  civ = Civ.create({ seed: civSeedNo }); civFollow = civ.pickPerson('oldest'); civKey = t.key; civMsSeen = 0; civRunning = true; $('civPause').textContent = '⏸';
   logVisit('文明の実験 #' + civSeedNo + '(' + t.name + ')'); paintCiv(true);
 };
 function civTick(dt) {
@@ -1036,8 +1084,9 @@ function paintCiv(force) {
   const ind = civ.individuals().map((x) => '<div>・' + x.age + '歳 / 知っている技術 ' + x.known + ' 個 / 得意: ' + x.best.join('、') + '</div>').join('');
   const progs = civ.programs();
   const progHtml = progs.length ? '<details style="margin-top:6px"><summary><b>💻 この世界で書かれたプログラム(' + progs.length + '本・実際に実行した結果)</b></summary>' + progs.map((pg) => '<div style="margin-top:6px"><b>' + pg.title + '</b> → 出力: ' + pg.out.join(', ') + '<pre>' + pg.code.map((c) => String(c.addr).padStart(2, ' ') + ' ' + c.name + (c.arg !== undefined ? ' ' + c.arg : '') + '  ; ' + c.meaning).join('\n') + '</pre></div>').join('') + '<div style="color:var(--dim)">命令の名前は、この世界の「情報」系の技術名から付いています(意味は右の説明)。</div></details>' : '';
-  const indHtml = '<details style="margin-top:6px"><summary><b>👤 注目している個人(全体から ' + Math.min(150, Math.floor(s.pop)) + ' 人を追跡中)</b></summary>' + ind + '</details>';
-  body.innerHTML = '<div style="margin-top:6px">世界のシード <b>' + civSeedNo + '</b> ・ ' + fmtYears(s.year) + '経過 ・ 人口 ' + fmtPop(s.pop) + ' ・ 技術 ' + s.items + '(作られた総数 ' + s.total + ')' + (s.ended ? ' <b style="color:#f87171">途絶えた</b>' : '') + '</div><div class="bars" style="margin-top:6px">' + bars + '</div><div class="ms">' + ms + '</div><div class="tl">' + tl + '</div>' + indHtml + progHtml;
+  const indHtml = '', _unused = '<details style="margin-top:6px"><summary><b>👤 注目している個人(全体から ' + Math.min(150, Math.floor(s.pop)) + ' 人を追跡中)</b></summary>' + ind + '</details>';
+  paintPerson();
+  body.innerHTML = '<div style="margin-top:6px">世界のシード <b>' + civSeedNo + '</b> ・ ' + fmtYears(s.year) + '経過 ・ 追跡中 ' + fmtPop(s.pop) + '人 ・ 技術 ' + s.items + '(作られた総数 ' + s.total + ')' + (s.ended ? ' <b style="color:#f87171">途絶えた</b>' : '') + '</div><div class="bars" style="margin-top:6px">' + bars + '</div><div class="ms">' + ms + '</div><div class="tl">' + tl + '</div>' + indHtml + progHtml;
 }
 function enterScene(fn) { savedDir = st.dir; fadeTo(fn); }
 function scenesOnEnterCosmos() {
@@ -1160,7 +1209,7 @@ let last = performance.now(), t0Real = last;
 function frame(now) {
   const dtReal = Math.min(0.1, (now - last) / 1000); last = now;
   const dpr = resize();
-  if (scenes.active()) { st.logMode = false; civTick(dtReal); scenes.frame(dtReal, dpr); requestAnimationFrame(frame); return; }
+  if (scenes.active()) { st.logMode = false; civTick(dtReal); scenes.frame(dtReal, dpr); paintNear(); requestAnimationFrame(frame); return; }
   if (cam.rot && ptrs.size === 0) cam.az += 0.03 * dtReal;
   st.logMode = false;
   if (st.seek !== null) {
