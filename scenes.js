@@ -20,6 +20,9 @@ function mul(a, b) {
   for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + r] * b[c * 4 + k]; o[c * 4 + r] = s; }
   return o;
 }
+const fwdOf = (cam) => [Math.cos(cam.el) * Math.sin(cam.az), Math.sin(cam.el), Math.cos(cam.el) * Math.cos(cam.az)];
+// 自由飛行のときは、カメラの位置と向きをそのまま使う。ふだんは原点を見る回り込み
+const viewOf = (cam) => { if (cam.fly) { const f = fwdOf(cam); return [cam.pos, [cam.pos[0] + f[0], cam.pos[1] + f[1], cam.pos[2] + f[2]]]; } return [eyeOf(cam), [0, 0, 0]]; };
 const eyeOf = (cam) => [cam.dist * Math.cos(cam.el) * Math.sin(cam.az), cam.dist * Math.sin(cam.el), cam.dist * Math.cos(cam.el) * Math.cos(cam.az)];
 function project(vp, p, W, H) { // → CSS px [x, y, w]
   const x = vp[0] * p[0] + vp[4] * p[1] + vp[8] * p[2] + vp[12], y = vp[1] * p[0] + vp[5] * p[1] + vp[9] * p[2] + vp[13];
@@ -303,7 +306,9 @@ fn skyCol(rd: vec3f, Ls: vec3f, withDisk: bool) -> vec3f {
   var t = 0.0006; var tp = 0.0; var hit = false;
   let ymax = u.eb.w * 0.8 + 2.0;
   if (rd.y < 0.5) {
-    for (var k = 0; k < 110; k++) {
+    let maxK = select(96, 36, rd.y > 0.12);
+    for (var k = 0; k < 96; k++) {
+      if (k >= maxK) { break; }
       let p = ro + rd * t;
       let lod = i32(clamp(log2(max(t, 0.01) / 0.01) * 0.45, 0.0, 3.0));
       let d = p.y - (gH(p.xz, 5 - lod) - E0);
@@ -578,6 +583,215 @@ fn sdTri(p: vec2f, x0: f32, y0: f32, w: f32, hgt: f32) -> f32 { return max(abs(p
 }
 `;
 
+const OBJ_WGSL = /* wgsl */`
+struct U { f: vec4f, r: vec4f, u: vec4f, e: vec4f, p0: vec4f, p1: vec4f, p2: vec4f };
+@group(0) @binding(0) var<uniform> u: U;
+struct PO { @builtin(position) p: vec4f, @location(0) uv: vec2f };
+@vertex fn vs(@builtin(vertex_index) vi: u32) -> PO {
+  var p = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
+  var o: PO; o.p = vec4f(p[vi], 0.0, 1.0); o.uv = p[vi] * 0.5 + 0.5; return o;
+}
+fn hash31(p: vec3f) -> f32 { var q = fract(p * 0.1031); q += dot(q, q.zyx + 31.32); return fract((q.x + q.y) * q.z); }
+fn noise3(p: vec3f) -> f32 {
+  let i = floor(p); let f = fract(p); let w = f * f * (3.0 - 2.0 * f);
+  let x0 = mix(mix(hash31(i), hash31(i + vec3f(1.0, 0.0, 0.0)), w.x), mix(hash31(i + vec3f(0.0, 1.0, 0.0)), hash31(i + vec3f(1.0, 1.0, 0.0)), w.x), w.y);
+  let x1 = mix(mix(hash31(i + vec3f(0.0, 0.0, 1.0)), hash31(i + vec3f(1.0, 0.0, 1.0)), w.x), mix(hash31(i + vec3f(0.0, 1.0, 1.0)), hash31(i + vec3f(1.0, 1.0, 1.0)), w.x), w.y);
+  return mix(x0, x1, w.z);
+}
+fn fbm3(p: vec3f, oct: i32) -> f32 {
+  var s = 0.0; var a = 0.5; var q = p; var n = 0.0;
+  for (var k = 0; k < 6; k++) { if (k >= oct) { break; } s += a * noise3(q); n += a; q = q * 2.03 + vec3f(1.7, 9.2, 3.3); a *= 0.5; }
+  return s / max(n, 0.001);
+}
+fn starfield(d: vec3f) -> vec3f {
+  var c = vec3f(0.0);
+  let q = d * 170.0; let id = floor(q); let f = fract(q) - 0.5; let h = hash31(id);
+  c += vec3f(step(0.985, h) * exp(-dot(f, f) * 60.0) * (0.35 + hash31(id + 7.0)));
+  let q2 = d * 60.0; let id2 = floor(q2); let f2 = fract(q2) - 0.5; let h2 = hash31(id2 + 3.0);
+  c += vec3f(1.0, 0.85, 0.7) * step(0.993, h2) * exp(-dot(f2, f2) * 40.0) * 0.8;
+  let band = exp(-pow(d.y * 3.0 + 0.2 * sin(d.x * 2.0), 2.0)) * (0.5 + fbm3(d * 4.0, 4));
+  c += vec3f(0.08, 0.09, 0.14) * band * 0.7;
+  return c;
+}
+fn bbCol(T: f32) -> vec3f {
+  let t = clamp(T, 1000.0, 40000.0) / 100.0;
+  var red = 1.0; var green = 1.0; var blue = 1.0;
+  if (t > 66.0) { red = clamp(1.2929 * pow(t - 60.0, -0.1332047592), 0.0, 1.0); }
+  if (t <= 66.0) { green = clamp(0.39008 * log(t) - 0.63184, 0.0, 1.0); } else { green = clamp(1.12989 * pow(t - 60.0, -0.0755148492), 0.0, 1.0); }
+  if (t < 66.0) { blue = select(clamp(0.5432 * log(t - 10.0) - 1.19625, 0.0, 1.0), 0.0, t <= 19.0); }
+  return vec3f(red, green, blue);
+}
+
+// ブラックホール: シュワルツシルト時空の光の曲がり方(u''=-u+1.5u², 単位は地平線半径)を、画素ごとに数値積分する。
+fn blackHole(ro: vec3f, rd: vec3f, jets: bool) -> vec3f {
+  let D = length(ro); let e1 = ro / D;
+  var nn = cross(ro, rd); let nl = length(nn);
+  if (nl < 1e-5) { nn = cross(e1, vec3f(0.0, 1.0, 0.0)); }
+  nn = normalize(nn);
+  var e2 = cross(nn, e1);
+  if (dot(rd, e2) < 0.0) { e2 = -e2; }
+  let cosIn = dot(rd, -e1); let sinPsi = sqrt(max(0.0, 1.0 - cosIn * cosIn));
+  let b = D * sinPsi / sqrt(max(0.05, 1.0 - 1.0 / D));
+  var uu = 1.0 / D;
+  let v0 = sqrt(max(0.0, 1.0 / (b * b) - uu * uu * (1.0 - uu)));
+  var vv = select(-v0, v0, cosIn >= 0.0);
+  var phi = 0.0; var col = vec3f(0.0); var alpha = 0.0; var pprev = ro; var escaped = false; var captured = false;
+  let rin = 3.0; let rout = select(16.0, 24.0, jets);
+  for (var k = 0; k < 220; k++) {
+    let dphi = select(0.03, 0.06, uu < 0.12);
+    vv += (-uu + 1.5 * uu * uu) * dphi; uu += vv * dphi; phi += dphi;
+    if (uu >= 1.0) { captured = true; break; }
+    if (uu <= 0.0005) { escaped = true; break; }
+    let rr = 1.0 / uu;
+    let p = (cos(phi) * e1 + sin(phi) * e2) * rr;
+    if (pprev.y * p.y < 0.0 && alpha < 0.97) {
+      let tt = pprev.y / (pprev.y - p.y);
+      let pc = mix(pprev, p, tt); let rc = length(pc.xz);
+      if (rc > rin && rc < rout) {
+        let T0 = 9500.0 * pow(rin / rc, 0.75);
+        let vdir = normalize(vec3f(-pc.z, 0.0, pc.x)); let ldir = normalize(pprev - p);
+        let beta = min(0.55, sqrt(0.5 / rc)); let g = sqrt(1.0 - beta * beta) / (1.0 - beta * dot(vdir, ldir));
+        let ang = atan2(pc.z, pc.x) - u.e.w * 0.9 / pow(rc, 1.5);
+        let tex = 0.55 + 0.9 * fbm3(vec3f(rc * 1.6, cos(ang) * 2.2, sin(ang) * 2.2), 4);
+        let inten = pow(rin / rc, 1.4) * 1.5 * pow(g, 3.0) * tex * (1.0 - smoothstep(rout * 0.7, rout, rc));
+        let a = 0.92;
+        col += (1.0 - alpha) * bbCol(T0 * g) * inten * a;
+        alpha += (1.0 - alpha) * a;
+      }
+    }
+    pprev = p;
+  }
+  if (escaped) {
+    let dOut = normalize(-sin(phi) * e1 + cos(phi) * e2);
+    col += (1.0 - alpha) * starfield(dOut);
+  }
+  // 光子リング(光が何周もしてから届く細い輪)
+  let ring = exp(-pow((b - 2.598) / 0.045, 2.0));
+  if (!captured || ring > 0.01) { col += vec3f(1.0, 0.8, 0.5) * ring * 0.45 * (1.0 - alpha * 0.5); }
+  if (jets) { // 銀河中心の巨大ブラックホール: 上下に細く伸びるジェット(曲がりは無視)
+    for (var s = 0; s < 28; s++) {
+      let t = 6.0 + f32(s) * 5.0; let p = ro + rd * t;
+      let w = 0.9 + 0.05 * abs(p.y); let dens = exp(-pow(length(p.xz) / w, 2.0)) * select(0.0, 1.0, abs(p.y) > 3.5) * exp(-abs(p.y) / 55.0);
+      col += vec3f(0.35, 0.55, 1.0) * dens * 0.07;
+    }
+  }
+  return col;
+}
+fn pulsar(ro: vec3f, rd: vec3f) -> vec3f {
+  var col = starfield(rd);
+  let b = dot(ro, rd); let c = dot(ro, ro) - 1.0; let disc = b * b - c;
+  let w = u.e.w * u.p1.x; let tilt = u.p1.y;
+  let m = normalize(vec3f(sin(tilt) * cos(w), cos(tilt), sin(tilt) * sin(w)));
+  let dm = dot(rd, m); let den = max(1.0 - dm * dm, 1e-4);
+  let s = (dot(ro, m) - dm * dot(ro, rd)) / den;
+  let cr = cross(rd, m); let d = abs(dot(cr, ro)) / max(length(cr), 1e-4);
+  let width = 0.10 + 0.16 * abs(s);
+  var beam = exp(-pow(d / width, 2.0)) * smoothstep(0.9, 1.7, abs(s)) / (1.0 + 0.22 * abs(s));
+  col += vec3f(0.5, 0.75, 1.0) * beam * 2.4;
+  let cp = ro + rd * (-b); let dc = length(cp);
+  col += vec3f(0.25, 0.45, 1.0) * exp(-dc * dc * 0.9) * 0.5;
+  if (disc > 0.0) {
+    let t = -b - sqrt(disc); let p = ro + rd * t; let n = p;
+    let limb = pow(max(dot(n, -rd), 0.0), 0.35);
+    col = vec3f(0.75, 0.9, 1.0) * (0.45 + 0.7 * limb) * 0.9;
+    let hot = smoothstep(0.6, 1.0, abs(dot(n, m)));
+    col += vec3f(0.6, 0.8, 1.0) * hot * 0.8;
+  }
+  return col;
+}
+fn whiteDwarf(ro: vec3f, rd: vec3f) -> vec3f {
+  var col = starfield(rd);
+  let T = u.p1.z;
+  let b = dot(ro, rd); let c = dot(ro, ro) - 1.0; let disc = b * b - c;
+  let cp = ro + rd * (-b); let dc = length(cp);
+  col += bbCol(T) * exp(-(dc - 1.0) * 2.2) * 0.35 * step(1.0, dc);
+  if (disc > 0.0) {
+    let t = -b - sqrt(disc); let p = ro + rd * t;
+    let limb = pow(max(dot(p, -rd), 0.0), 0.5);
+    col = bbCol(T) * (0.45 + 0.75 * limb) * 1.5;
+  }
+  // 伴星(白色矮星のまわりを回る小さな星)
+  let ang = u.e.w * 0.5; let cpos = vec3f(cos(ang), 0.15, sin(ang)) * 7.0;
+  let cb = dot(cpos - ro, rd); let cd = length(ro + rd * cb - cpos);
+  if (cb > 0.0) { col += vec3f(1.0, 0.55, 0.3) * exp(-cd * cd * 8.0) * 1.6; }
+  return col;
+}
+fn nebDens(p: vec3f, sub: i32) -> vec4f {
+  let r = length(p); let seed = u.p0.z; var rgb = vec3f(0.0); var dens = 0.0;
+  if (sub == 0) {
+    let shell = exp(-pow((r - 1.55) / 0.3, 2.0));
+    let fil = pow(fbm3(p * 3.2 + seed, 5), 2.4) * 2.6;
+    dens = shell * fil;
+    let k = fbm3(p * 1.8 + seed + 7.0, 3);
+    rgb = mix(vec3f(0.95, 0.22, 0.15), vec3f(0.12, 0.85, 0.75), smoothstep(0.4, 0.6, k));
+    if (u.p1.w > 0.5) { rgb += vec3f(0.3, 0.5, 1.0) * exp(-r * r * 4.0) * 0.8; dens += exp(-r * r * 6.0) * 0.6; }
+  } else if (sub == 1) {
+    let d = fbm3(p * 1.5 + seed, 5) - 0.32 - 0.22 * r;
+    dens = max(d, 0.0) * 5.0;
+    let k = fbm3(p * 2.4 + seed + 3.0, 3);
+    rgb = mix(vec3f(1.0, 0.25, 0.35), vec3f(0.2, 0.7, 0.9), smoothstep(0.45, 0.65, k));
+    for (var i = 0; i < 5; i++) { let sp = (vec3f(hash31(vec3f(f32(i), seed, 1.0)), hash31(vec3f(f32(i), seed, 2.0)), hash31(vec3f(f32(i), seed, 3.0))) - 0.5) * 1.8; let dd = length(p - sp); rgb += vec3f(0.7, 0.85, 1.0) * exp(-dd * dd * 40.0) * 1.8; dens += exp(-dd * dd * 40.0) * 0.5; }
+  } else {
+    let q = vec3f(p.x, p.y * 0.62, p.z); let rq = length(q);
+    let shell1 = exp(-pow((rq - 1.05) / 0.16, 2.0)); let shell2 = exp(-pow((rq - 1.5) / 0.22, 2.0)) * 0.6;
+    let lobes = exp(-pow(length(p.xz) / 0.5, 2.0)) * smoothstep(0.5, 1.8, abs(p.y)) * exp(-abs(p.y) * 0.6);
+    let n = 0.55 + 0.9 * fbm3(p * 3.0 + seed, 4);
+    dens = (shell1 + shell2 + lobes * 0.8) * n;
+    rgb = mix(vec3f(0.95, 0.25, 0.2), vec3f(0.1, 0.85, 0.8), 1.0 - smoothstep(0.9, 1.3, rq));
+    rgb += vec3f(0.9, 0.95, 1.0) * exp(-r * r * 60.0) * 3.0; dens += exp(-r * r * 60.0);
+  }
+  return vec4f(rgb, dens);
+}
+fn nebula(ro: vec3f, rd: vec3f) -> vec3f {
+  let sub = i32(u.p0.y + 0.5);
+  var col = vec3f(0.0); var T = 1.0;
+  let b = dot(ro, rd); let c = dot(ro, ro) - 6.5; let disc = b * b - c;
+  if (disc > 0.0) {
+    let t0 = max(0.0, -b - sqrt(disc)); let t1 = -b + sqrt(disc); let n = 56; let dt = (t1 - t0) / f32(n);
+    for (var i = 0; i < 56; i++) {
+      let p = ro + rd * (t0 + (f32(i) + 0.5) * dt);
+      let d = nebDens(p, sub);
+      col += T * d.rgb * d.w * dt * 1.7;
+      T *= exp(-d.w * dt * 0.55);
+      if (T < 0.02) { break; }
+    }
+  }
+  return col + T * starfield(rd);
+}
+fn globular(ro: vec3f, rd: vec3f) -> vec3f {
+  var col = vec3f(0.0); let seed = u.p0.z;
+  let b = dot(ro, rd); let c = dot(ro, ro) - 16.0; let disc = b * b - c;
+  if (disc > 0.0) {
+    let t0 = max(0.0, -b - sqrt(disc)); let t1 = -b + sqrt(disc); let dt = (t1 - t0) / 48.0;
+    for (var i = 0; i < 48; i++) {
+      let p = ro + rd * (t0 + (f32(i) + 0.5) * dt); let r2 = dot(p, p);
+      let rho = pow(1.0 + r2 / 0.7, -2.5);
+      col += vec3f(1.0, 0.85, 0.6) * rho * dt * 0.34;
+      let q = p * 11.0; let id = floor(q); let fp = fract(q) - 0.5; let h = hash31(id + seed);
+      let star = step(1.0 - 0.5 * rho, h) * exp(-dot(fp, fp) * 26.0);
+      let hue = hash31(id + 9.0);
+      col += mix(vec3f(1.0, 0.6, 0.35), vec3f(0.85, 0.9, 1.0), step(0.93, hue)) * star * (0.7 + hash31(id + 3.0)) * 0.9;
+    }
+  }
+  return col + starfield(rd) * 0.4;
+}
+@fragment fn fs(i: PO) -> @location(0) vec4f {
+  let uv = i.uv * 2.0 - 1.0;
+  let rd = normalize(u.f.xyz + u.r.xyz * uv.x * u.f.w * u.r.w + u.u.xyz * uv.y * u.r.w);
+  let ro = u.e.xyz; let kind = i32(u.p0.x + 0.5);
+  var col = vec3f(0.0);
+  if (kind == 0) { col = blackHole(ro, rd, false); }
+  else if (kind == 1) { col = blackHole(ro, rd, true); }
+  else if (kind == 2) { col = pulsar(ro, rd); }
+  else if (kind == 3) { col = nebula(ro, rd); }
+  else if (kind == 4) { col = whiteDwarf(ro, rd); }
+  else { col = globular(ro, rd); }
+  col = 1.0 - exp(-col * 1.25);
+  col = pow(clamp(col, vec3f(0.0), vec3f(1.0)), vec3f(0.95));
+  return vec4f(col, 1.0);
+}
+`;
+
 // ---------------------------------------------------------------- 本体
 function create(env) {
   const { device, ctx, canvas, format, astro, cosmo } = env;
@@ -587,6 +801,7 @@ function create(env) {
     system: { az: 0.3, el: 0.75, dist: 4.4, min: 0.4, max: 40 },
     planet: { az: 0.5, el: 0.25, dist: 4.2, min: 1.015, max: 10 },
     surface: { az: 0, el: 0.12, dist: 1, min: 0.25, max: 2.2 },
+    object: { az: 0.6, el: 0.3, dist: 16, min: 3, max: 150 },
   };
   const GS = 1 / 20; // kpc → 表示単位
   let moduleOK = false;
@@ -595,7 +810,7 @@ function create(env) {
     m.getCompilationInfo().then((info) => info.messages.forEach((x) => console[x.type === 'error' ? 'error' : 'warn'](label, x.lineNum + ':' + x.linePos, x.message)));
     return m;
   };
-  const galMod = mkMod(GAL_WGSL, 'galaxy'), sprMod = mkMod(SPR_WGSL, 'sprites'), plMod = mkMod(PLANET_WGSL, 'planet'), surfMod = mkMod(SURF_WGSL, 'surface');
+  const galMod = mkMod(GAL_WGSL, 'galaxy'), sprMod = mkMod(SPR_WGSL, 'sprites'), plMod = mkMod(PLANET_WGSL, 'planet'), surfMod = mkMod(SURF_WGSL, 'surface'), objMod = mkMod(OBJ_WGSL, 'object');
   const V = GPUShaderStage.VERTEX, F = GPUShaderStage.FRAGMENT;
   const mkLayout = (entries) => { const b = device.createBindGroupLayout({ entries }); return { b, p: device.createPipelineLayout({ bindGroupLayouts: [b] }) }; };
   const galL = mkLayout([{ binding: 0, visibility: V | F, buffer: { type: 'uniform' } }, { binding: 1, visibility: V, buffer: { type: 'read-only-storage' } }, { binding: 2, visibility: V, buffer: { type: 'read-only-storage' } }]);
@@ -607,6 +822,9 @@ function create(env) {
   const sprPipe = device.createRenderPipeline({ layout: sprL.p, vertex: { module: sprMod, entryPoint: 'vs' }, fragment: { module: sprMod, entryPoint: 'fs', targets: [{ format, blend: premul }] } });
   const plPipe = device.createRenderPipeline({ layout: plL.p, vertex: { module: plMod, entryPoint: 'vs' }, fragment: { module: plMod, entryPoint: 'fs', targets: [{ format }] } });
   const surfPipe = device.createRenderPipeline({ layout: plL.p, vertex: { module: surfMod, entryPoint: 'vs' }, fragment: { module: surfMod, entryPoint: 'fs', targets: [{ format }] } });
+  const objPipe = device.createRenderPipeline({ layout: plL.p, vertex: { module: objMod, entryPoint: 'vs' }, fragment: { module: objMod, entryPoint: 'fs', targets: [{ format }] } });
+  const objU = device.createBuffer({ size: 112, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  const objBG = device.createBindGroup({ layout: plL.b, entries: [{ binding: 0, resource: { buffer: objU } }] });
   const surfCL = mkLayout([{ binding: 0, visibility: V | F, buffer: { type: 'uniform' } }, { binding: 1, visibility: V, buffer: { type: 'read-only-storage' } }]);
   const crPipe = device.createRenderPipeline({ layout: surfCL.p, vertex: { module: surfMod, entryPoint: 'vsC' }, fragment: { module: surfMod, entryPoint: 'fsC', targets: [{ format, blend: premul }] } });
   const U = GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, ST = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST;
@@ -656,8 +874,9 @@ function create(env) {
     galBG = device.createBindGroup({ layout: galL.b, entries: [{ binding: 0, resource: { buffer: galU } }, { binding: 1, resource: { buffer: galBufs[0] } }, { binding: 2, resource: { buffer: galBufs[1] } }] });
     S.gal = { ...gal, sts, n, A, B, tNow: halo.tNow, rho: halo.rho };
     S.kind = 'galaxy'; S.clock = 0; S.stack = ['cosmos'];
-    Object.assign(cams.galaxy, { az: 0.4, el: 0.95, dist: Math.max(1.2, gal.R * GS * 2.4) });
+    Object.assign(cams.galaxy, { fly: false, az: 0.4, el: 0.95, dist: Math.max(1.2, gal.R * GS * 2.4) });
     clearLabels(); S.gfound = []; S.scanTok = null;
+    S.objs = astro.genObjects(gal, halo.tNow, astro.rng(halo.seed ^ 0x2d1f3a));
     addGalaxyLabels();
     env.onEnter('galaxy');
   }
@@ -676,10 +895,44 @@ function create(env) {
       S.gpts.push(f.i);
       S.labels.push(addLabel('🌱 ' + (f.intelligent ? '知的生命' : env.life.STAGE_JP[f.stage].split('(')[0]), () => flyTo(f.i, f.k), 'pl'));
     }
+    S.objLab = [];
+    for (const o of S.objs || []) {
+      S.gpts.push(o); S.objLab.push(S.labels.length);
+      S.labels.push(addLabel(astro.OBJ_TYPES[o.type].icon + ' ' + astro.OBJ_TYPES[o.type].jp.split('(')[0], () => fade(() => enterObject(astro.makeObject(o.type, o.seed, o.hint), 'galaxy')), 'obj'));
+    }
     for (const i of picks) {
       const m = g.sts.mass[i], sp = astro.starFromMass(m, Math.max(0.1, g.tNow - g.sts.birth[i])).spec;
       S.gpts.push(i); S.labels.push(addLabel('☆ ' + sp + '型 ' + m.toFixed(1) + 'M☉', () => fade(() => enterStarSystem(i))));
     }
+  }
+  function objPos(o, tMyr) {
+    const om = 0.225 / Math.max(o.r, 0.3), th = o.th + om * tMyr;
+    return [o.r * Math.cos(th) * GS, o.z * GS, o.r * Math.sin(th) * GS];
+  }
+  // ---- 天体の画面(ブラックホール・中性子星・星雲など)
+  function enterObject(o, from) {
+    S.obj = o; S.kind = 'object'; S.clock = 0;
+    if (from === 'galaxy') { if (S.stack[S.stack.length - 1] !== 'galaxy') S.stack.push('galaxy'); } else S.stack = ['cosmos'];
+    const dist = { 0: 18, 1: 34, 2: 6, 3: 6.5, 4: 7, 5: 9 }[o.kind], c = cams.object;
+    Object.assign(c, { az: 0.6, el: o.kind <= 1 ? 0.12 : 0.3, dist, min: o.kind <= 1 ? 3 : 1.6, max: o.kind <= 1 ? 160 : 24 });
+    clearLabels(); env.onEnter('object');
+  }
+  function viewObject(type) { // 宇宙のどこからでも、種類を選んで見に行く
+    const seed = astro.hashSeed(env.getSeed ? env.getSeed() : 1, type.length, type.charCodeAt(0));
+    const o = astro.makeObject(type, seed, type === 'smbh' ? { mass: 4e6 * Math.pow(10, (seed % 100) / 50) } : null);
+    if (S.kind === 'galaxy') { clearLabels(); fade(() => enterObject(o, 'galaxy')); } else fade(() => enterObject(o, 'cosmos'));
+  }
+  function objectFrame(dt, W, H) {
+    const o = S.obj, cam = cams.object;
+    const ev = eyeOf(cam), el = Math.hypot(...ev), fwd = [-ev[0] / el, -ev[1] / el, -ev[2] / el];
+    let right = [-fwd[2], 0, fwd[0]]; const rl = Math.hypot(right[0], right[2]) || 1; right = [right[0] / rl, 0, right[2] / rl];
+    const up = cross3(right, fwd), t = performance.now() / 1000;
+    const omega = o.P ? 2 * Math.PI / Math.min(8, Math.max(1.2, o.P)) : 3;
+    const u = new Float32Array(28);
+    u.set([...fwd, W / H], 0); u.set([...right, 0.5], 4); u.set([...up, cam.dist], 8); u.set([...ev, t], 12);
+    u.set([o.kind, o.sub || 0, (o.seed % 1000) / 10, o.spin || 0], 16);
+    u.set([omega, o.tilt || 0.7, o.T || 20000, o.pulsar ? 1 : 0], 20); u.set([1, 1, 1, 0], 24);
+    device.queue.writeBuffer(objU, 0, u);
   }
   function specOf(i) {
     const g = S.gal, r = g.A[i * 4], birth = g.sts.birth[i];
@@ -724,7 +977,7 @@ function create(env) {
   }
   function pickStar(x, y) {
     const g = S.gal, W = canvas.clientWidth, H = canvas.clientHeight, cam = cams.galaxy;
-    const vp = mul(perspective(0.9, W / H, 0.005, 100), lookAt(eyeOf(cam), [0, 0, 0], [0, 1, 0]));
+    const vp = mul(perspective(0.9, W / H, 0.005, 100), lookAt(...viewOf(cam), [0, 1, 0]));
     let best = -1, bd = 34 * 34;
     for (let i = 0; i < g.n; i += 1) {
       const q = project(vp, starPos(i, S.clock), W, H);
@@ -756,7 +1009,7 @@ function create(env) {
     const sq = Math.sqrt(sys.star.L);
     S.hzPts = [0.95 * sq, 1.67 * sq].flatMap((rr) => Array.from({ length: 120 }, (_, k) => { const a = k / 120 * Math.PI * 2; return compress([rr * Math.cos(a), 0, rr * Math.sin(a)]); }));
     const maxA = sys.planets.reduce((m, p) => Math.max(m, p.a * (1 + p.e)), 1);
-    cams.system.dist = Math.max(2.2, compress([maxA, 0, 0])[0] * 2.3);
+    cams.system.fly = false; cams.system.dist = Math.max(2.2, compress([maxA, 0, 0])[0] * 2.3);
     clearLabels();
     S.labels = sys.planets.map((p, i) => addLabel(p.name + (p.env.nowLiquid ? ' ★' : ''), () => enterPlanet(i), 'pl'));
     env.onEnter('system');
@@ -767,7 +1020,7 @@ function create(env) {
   }
   function systemFrame(dt, W, H, dpr) {
     const sys = S.sys, cam = cams.system;
-    const vp = mul(perspective(0.9, W / H, 0.02, 400), lookAt(eyeOf(cam), [0, 0, 0], [0, 1, 0]));
+    const vp = mul(perspective(0.9, W / H, 0.02, 400), lookAt(...viewOf(cam), [0, 1, 0]));
     const kinds = { rock: [0.55, 0.5, 0.45], gas: [0.85, 0.75, 0.55], icegiant: [0.5, 0.75, 0.9] };
     const colOf = { barren: [0.5, 0.48, 0.45], earthlike: [0.25, 0.5, 0.85], desert: [0.75, 0.45, 0.28], venus: [0.9, 0.78, 0.5], lava: [0.9, 0.3, 0.08], frozen: [0.8, 0.9, 1.0] };
     const list = [];
@@ -1017,7 +1270,7 @@ function create(env) {
   }
   function surfaceFrame(dt, W, H) {
     const p = S.pl, sf = S.sf, cam = cams.surface, R = p.radiusE * 6371;
-    const fi = (S.walk ? 1 : 0) + (keys.w || keys.arrowup ? 1 : 0) - (keys.s || keys.arrowdown ? 1 : 0);
+    const fi = (S.walk || 0) + (keys.w || keys.arrowup ? 1 : 0) - (keys.s || keys.arrowdown ? 1 : 0);
     const si = (keys.d || keys.arrowright ? 1 : 0) - (keys.a || keys.arrowleft ? 1 : 0);
     const spd = 0.05 * (keys.shift ? 12 : 1) * dt, hd = cam.az;
     const clampW = (v) => Math.max(-600, Math.min(600, v));
@@ -1072,6 +1325,7 @@ function create(env) {
     }
   }
   function speedText(mult) {
+    if (S.kind === 'object') return '天体の動き(見やすいよう実際より遅い)';
     if (S.kind === 'galaxy') return '1秒 = ' + (mult * 10).toFixed(mult >= 10 ? 0 : 1) + '百万年(銀河の回転)';
     if (S.kind === 'system') return '1秒 = ' + (mult * 0.2).toFixed(2) + '年(公転)';
     return '1秒 = ' + (mult * 2).toFixed(1) + '時間(自転)';
@@ -1095,6 +1349,9 @@ function create(env) {
   function info() {
     const g = S.gal, sys = S.sys, p = S.pl;
     const crumb = ['宇宙'];
+    if (S.kind === 'object') {
+      const o = S.obj; return { crumb: S.stack.includes('galaxy') ? ['宇宙', '銀河', o.jp.split('(')[0]] : ['宇宙', o.jp.split('(')[0]], era: 'ドラッグで回り込み、ホイール/ピンチで近づく・離れる。実在する物理の式で計算した値と、その見え方です', big: o.icon + ' ' + o.jp, rows: o.rows };
+    }
     if (S.kind === 'galaxy') {
       crumb.push('銀河');
       return { crumb, era: '星をタップすると、その恒星系へズームします', big: astro.TYPE_JP[g.type],
@@ -1122,7 +1379,22 @@ function create(env) {
         ['生命', bioText(p)], ...envRows(p, sys)] };
   }
 
+  // 自由飛行(銀河・恒星系): W/S=前後 A/D=左右 Q/E=下上 Shift=速く。🚀前進ボタンの長押しでも進む
+  function flyMove(dt) {
+    const cam = cams[S.kind]; if (!cam || !cam.fly) return;
+    const f = fwdOf(cam), r = [Math.cos(cam.az), 0, -Math.sin(cam.az)];
+    const fi = (S.walk || 0) + (keys.w || keys.arrowup ? 1 : 0) - (keys.s || keys.arrowdown ? 1 : 0), si = (keys.d || keys.arrowright ? 1 : 0) - (keys.a || keys.arrowleft ? 1 : 0), vi = (keys.e || keys[' '] ? 1 : 0) - (keys.q ? 1 : 0);
+    const sp = (S.kind === 'galaxy' ? 0.5 : 2.5) * (cam.spd || 1) * (keys.shift ? 5 : 1) * dt;
+    for (let k = 0; k < 3; k++) cam.pos[k] += f[k] * fi * sp + r[k] * si * sp + (k === 1 ? vi * sp : 0);
+  }
+  function setFly(on) {
+    const cam = cams[S.kind]; if (!cam || (S.kind !== 'galaxy' && S.kind !== 'system')) return false;
+    if (on && !cam.fly) { const e = eyeOf(cam), l = Math.hypot(...e), f = e.map((v) => -v / l); Object.assign(cam, { fly: true, pos: e.slice(), el: Math.asin(f[1]), az: Math.atan2(f[0], f[2]), spd: 1 }); }
+    else if (!on && cam.fly) { const p = cam.pos, d = Math.min(cam.max, Math.max(cam.min, Math.hypot(...p))); Object.assign(cam, { fly: false, dist: d, az: Math.atan2(p[0], p[2]), el: Math.asin(Math.max(-1, Math.min(1, p[1] / (Math.hypot(...p) || 1)))) }); }
+    return true;
+  }
   function frame(dtReal, dpr) {
+    flyMove(dtReal);
     const dir = env.getDir(), mult = env.getMult();
     if (dir !== 0) {
       if (S.kind === 'galaxy') S.clock += dir * mult * 10 * dtReal;
@@ -1134,19 +1406,29 @@ function create(env) {
     const pass = enc.beginRenderPass({ colorAttachments: [{ view: ctx.getCurrentTexture().createView(), clearValue: { r: 0, g: 0, b: 0.008, a: 1 }, loadOp: 'clear', storeOp: 'store' }] });
     if (S.kind === 'galaxy') {
       const cam = cams.galaxy, g = S.gal;
-      const vp = mul(perspective(0.9, canvas.width / canvas.height, 0.005, 100), lookAt(eyeOf(cam), [0, 0, 0], [0, 1, 0]));
+      const vp = mul(perspective(0.9, canvas.width / canvas.height, 0.005, 100), lookAt(...viewOf(cam), [0, 1, 0]));
       const u = new Float32Array(24); u.set(vp, 0);
       u.set([canvas.width, canvas.height, 1.7 * dpr * (env.coarse ? 1.2 : 1), (g.type === 'dwarf' ? 1.6 : 1) * Math.pow(140000 / g.n, 0.4) * env.getExpo()], 16);
       u.set([S.clock, GS, 0, 0], 20);
       device.queue.writeBuffer(galU, 0, u);
       pass.setPipeline(galPipe); pass.setBindGroup(0, galBG); pass.draw(6, g.n);
-      if (S.gpts) placeLabels(vp, W, H, S.gpts.map((i) => starPos(i, S.clock)));
+      if (S.gpts) {
+        const pts = S.gpts.map((i) => (typeof i === 'number' ? starPos(i, S.clock) : objPos(i, S.clock)));
+        placeLabels(vp, W, H, pts);
+        if (S.objLab && S.objLab.length > 14) { // 天体の印が多すぎると見づらいので、近い順に14個だけ出す(巨大ブラックホールは常に出す)
+          const eye = viewOf(cam)[0], order = S.objLab.map((li, k) => [li, Math.hypot(pts[li][0] - eye[0], pts[li][1] - eye[1], pts[li][2] - eye[2]) - (S.gpts[li].type === 'smbh' ? 1e3 : 0)]).sort((a, b) => a[1] - b[1]);
+          order.slice(14).forEach(([li]) => { S.labels[li].style.display = 'none'; });
+        }
+      }
     } else if (S.kind === 'system') {
       const { count } = systemFrame(dtReal, W, H, dpr);
       pass.setPipeline(sprPipe); pass.setBindGroup(0, sprBG); pass.draw(6, count);
     } else if (S.kind === 'planet') {
       planetFrame(dtReal, W, H);
       pass.setPipeline(plPipe); pass.setBindGroup(0, plBG); pass.draw(3);
+    } else if (S.kind === 'object') {
+      objectFrame(dtReal, W, H);
+      pass.setPipeline(objPipe); pass.setBindGroup(0, objBG); pass.draw(3);
     } else if (S.kind === 'surface') {
       planetFrame(dtReal, W, H); // 惑星の自転と太陽の向きの更新(軌道の絵は描かない)
       surfaceFrame(dtReal, W, H);
@@ -1160,7 +1442,7 @@ function create(env) {
   return {
     get kind() { return S.kind; }, active, curCam, enterGalaxy, enterSun, back, onTap, frame, speedText,
     canBack: () => S.stack.length > 0, enterPlanet, labelsRef: () => S.labels,
-    getSystem: () => S.sys, planetIndex: () => S.plIdx, eco: () => S.eco, ecoEvent: (k) => { if (S.eco) S.eco.event(k, 0.6 + 0.3 * Math.random()); }, nearby: () => S.near || [], follow: (k) => { S.follow = (S.follow === k ? null : k); }, following: () => S.follow, scanLife, flyTo, land: () => land(null), setWalk: (v) => { S.walk = v; },
+    getSystem: () => S.sys, planetIndex: () => S.plIdx, eco: () => S.eco, ecoEvent: (k) => { if (S.eco) S.eco.event(k, 0.6 + 0.3 * Math.random()); }, setFly, flying: () => { const c = cams[S.kind]; return !!(c && c.fly); }, viewObject, nearby: () => S.near || [], follow: (k) => { S.follow = (S.follow === k ? null : k); }, following: () => S.follow, scanLife, flyTo, land: () => land(null), setWalk: (v) => { S.walk = v; },
     dbg: () => ({ crCount, fauna: (S.fauna||[]).map((x) => x.kind + ':' + x.size.toFixed(4)).join(' '), h: terrainH(S.sf.s0, S.pl.seed || 1), sea: 0.3 + 0.4 * (S.pl.water || 0), seed: S.pl.seed, kind: S.pl.kind, s0: S.sf.s0 }),
     civTarget: () => (S.pl && S.pl.bio && S.pl.bio.intelligent && S.sys ? { key: S.sys.seed + ':' + S.pl.name, name: S.pl.name, real: !!S.pl.bio.real, seed: Math.floor((S.pl.seed || 1) * 1000) } : null),
     cosmosReturn: () => { S.kind = 'cosmos'; S.stack = []; clearLabels(); },

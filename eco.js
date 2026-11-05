@@ -7,7 +7,7 @@
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else root.Eco = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
-  const L = 0.6, G = 6, CELL = L / G, MAXN = 650, DT = 0.1;
+  const L = 0.8, G = 8, CELL = L / G, MAXN = 900, DT = 0.1, NR = 5, OPT = [0.45, 0.75, 1.1, 1.55, 2.1]; // 餌の種類(植物の大きさ)ごとに、合う動物の大きさがちがう
   const GS = [0.5, 0.5, 0.4, 0.4, 0.5]; // 遺伝子ごとの尺度(種の違いの測り方)
   const SYL = ['ア', 'イ', 'ウ', 'エ', 'オ', 'カ', 'キ', 'ク', 'ケ', 'コ', 'サ', 'シ', 'ス', 'セ', 'タ', 'チ', 'テ', 'ト', 'ナ', 'ニ', 'ネ', 'ノ', 'ハ', 'ヒ', 'フ', 'ホ', 'マ', 'ミ', 'ム', 'メ', 'モ', 'ヤ', 'ユ', 'ヨ', 'ラ', 'リ', 'ル', 'ロ'];
   function mulberry(a) { return function () { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -16,8 +16,8 @@
   function create(opts) {
     const rnd = mulberry((opts.seed >>> 0) || 1), blocked = opts.blocked || (() => false);
     const w = { year: 0, species: [], inds: [], log: [], events: 0, cover: opts.cover === undefined ? 0.85 : opts.cover, coverMul: 1, nextId: 1, extinctCount: 0, born: 0, died: 0 };
-    const gA = new Float32Array(G * G), gB = new Float32Array(G * G), fert = new Float32Array(G * G);
-    for (let i = 0; i < G * G; i++) { fert[i] = 0.55 + 0.9 * rnd(); gA[i] = 0.8; gB[i] = 0.8; }
+    const gR = Array.from({ length: NR }, () => new Float32Array(G * G).fill(0.8)), fert = new Float32Array(G * G);
+    for (let i = 0; i < G * G; i++) fert[i] = 0.55 + 0.9 * rnd();
     const nm = () => { let s = ''; const n = 2 + Math.floor(rnd() * 2); for (let i = 0; i < n; i++) s += SYL[Math.floor(rnd() * SYL.length)]; return s; };
     const say = (text, kind) => { w.log.push({ year: w.year, text, kind: kind || '' }); if (w.log.length > 200) w.log.shift(); };
 
@@ -35,8 +35,8 @@
       w.inds.push(a); sp.count++; if (sp.count > sp.peak) sp.peak = sp.count; w.born++; return a;
     }
     // 初期の種: 外から渡された見た目の一覧から作る(4つに1つは肉食)
-    const SIZES = [0.55, 0.8, 1.15, 1.5, 1.85, 0.95];
-    const pool = (opts.species || []).map((vis, i) => ({ vis, role: i % 4 === 3 ? 'carn' : i % 6 === 5 ? 'omni' : 'herb', size: SIZES[i % 6] }));
+    const SIZES = [0.5, 0.75, 1.1, 1.55, 2.1, 0.9, 1.3, 1.8];
+    const pool = (opts.species || []).map((vis, i) => ({ vis, role: i % 4 === 3 ? 'carn' : i % 6 === 5 ? 'omni' : 'herb', size: SIZES[i % SIZES.length] }));
     w.pool = pool;
     function introduce(p, n) {
       const v = Object.assign({}, p.vis); v.sizeRel = p.role === 'carn' ? 1.3 : p.size;
@@ -45,7 +45,7 @@
       for (let k = 0; k < n; k++) addInd(sp.id, g.map((x, j) => clamp(x + (rnd() - 0.5) * 0.12 * GS[j], 0.3, 2.6)), null, rnd() * L, rnd() * L, rnd() * 4);
       return sp;
     }
-    pool.forEach((p) => introduce(p, p.role === 'carn' ? 10 : 24));
+    pool.forEach((p) => introduce(p, p.role === 'carn' ? 10 : 16));
     const cellOf = (x, z) => Math.min(G - 1, Math.floor(x / CELL)) + G * Math.min(G - 1, Math.floor(z / CELL));
     const wrap = (v) => ((v % L) + L) % L;
     const dd = (a, b) => { let d = Math.abs(a - b); return d > L / 2 ? L - d : d; };
@@ -62,13 +62,12 @@
     }
 
     function step(dt) {
-      w.year += dt;
+      w.year += dt; w.stepN = (w.stepN || 0) + 1;
       // 植物の再生(草: 小さな動物向き、茂み: 大きな動物向き)
       const cm = w.cover * w.coverMul;
       for (let i = 0; i < G * G; i++) {
         const cap = cm * fert[i];
-        gA[i] += (6 * gA[i] * (1 - gA[i] / cap) + 0.1) * dt; gB[i] += (4 * gB[i] * (1 - gB[i] / cap) + 0.08) * dt;
-        if (gA[i] < 0.02) gA[i] = 0.02; if (gB[i] < 0.02) gB[i] = 0.02;
+        for (let k = 0; k < NR; k++) { const gk = gR[k], rr = 6 - k * 0.9; gk[i] += (rr * gk[i] * (1 - gk[i] / cap) + 0.1) * dt; if (gk[i] < 0.02) gk[i] = 0.02; }
       }
       if (w.coverMul < 1) w.coverMul = Math.min(1, w.coverMul + 0.04 * dt);
       buildGrid();
@@ -78,9 +77,11 @@
         const a = w.inds[i]; if (!a.alive) continue;
         const sp = w.species[a.sp], g = a.g, size = g[0], diet = g[2];
         a.age += dt;
-        let tx = 0, tz = 0, spd = 0.00025 * g[1], act = '歩く';
+        let tx = 0, tz = 0, spd = 0.00025 * g[1] * (dt / 0.1), act = '歩く', mate = null;
+        const think = ((w.stepN + a.id) % 3) === 0 || a.tx === undefined; // 周りを見て判断するのは3ステップに1回(軽くするため)
+        if (think) {
         // 逃げる / 追う / 群れる
-        let pred = null, pd = 0.05, prey = null, qd = 0.08, herdX = 0, herdZ = 0, hn = 0, mate = null, md = 0.12;
+        let pred = null, pd = 0.05, prey = null, qd = 0.08, herdX = 0, herdZ = 0, hn = 0, md = 0.12;
         nearby(a, 0.12, (b) => {
           const d = Math.hypot(sdir(a.x, b.x), sdir(a.z, b.z));
           if (b.g[2] > 0.5 && diet < 0.5 && b.g[0] > size * 0.7 && d < pd) { pred = b; pd = d; }
@@ -91,7 +92,7 @@
         else if (prey) {
           const d = Math.max(qd, 1e-4); tx = sdir(a.x, prey.x) / d; tz = sdir(a.z, prey.z) / d; spd *= 1.6; act = '追う';
           if (qd < 0.008) { // 捕まえるか。群れている獲物は捕まえにくい
-            const pc = clamp(0.5 * (g[1] / Math.max(0.3, prey.g[1])) * (1 - 0.5 * prey.g[3]), 0.05, 0.9);
+            const pc = clamp(1.2 * (g[1] / Math.max(0.3, prey.g[1])) * (1 - 0.5 * prey.g[3]), 0.1, 0.95);
             if (rnd() < pc) { prey.alive = false; prey.cause = '捕食'; w.species[prey.sp].count--; w.died++; a.e += 90 * prey.g[0] * Math.min(1, 1.3 * size / prey.g[0] + 0.3); act = '食べる'; }
           }
         } else {
@@ -103,11 +104,13 @@
           }
           tx += (rnd() - 0.5) * 1.5; tz += (rnd() - 0.5) * 1.5;
         }
+        a.tx = tx; a.tz = tz; a.sfac = spd / (0.00025 * g[1] * (dt / 0.1)); a.act0 = act;
+        } else { tx = a.tx; tz = a.tz; spd *= a.sfac; act = a.act0 === '逃げる' || a.act0 === '追う' ? a.act0 : '歩く'; }
         // 食べる(草食・雑食): 自分の大きさに合う植物から
         if (diet < 0.7 && act !== '逃げる') {
-          const c = cellOf(a.x, a.z), effA = Math.exp(-Math.pow((size - 0.65) / 0.5, 2)), effB = Math.exp(-Math.pow((size - 1.5) / 0.8, 2));
-          const takeA = Math.min(gA[c], 0.6 * dt * size * effA), takeB = Math.min(gB[c], 0.6 * dt * size * effB);
-          gA[c] -= takeA; gB[c] -= takeB; a.e += (takeA + takeB) * 220 * g[4] * (1 - diet); if (takeA + takeB > 0.002 * size) act = '食べる';
+          const c = cellOf(a.x, a.z); let took = 0;
+          for (let k = 0; k < NR; k++) { const eff = Math.exp(-Math.pow((size - OPT[k]) / 0.3, 2)); if (eff < 0.02) continue; const t = Math.min(gR[k][c], 0.6 * dt * size * eff); gR[k][c] -= t; took += t; }
+          a.e += took * 220 * g[4] * (1 - diet); if (took > 0.002 * size) act = '食べる';
         }
         // 体力: 代謝で減る
         a.e -= (16 * Math.pow(size, 0.75) / g[4]) * dt * (1 + 0.5 * g[1] * 0.3);
@@ -117,7 +120,7 @@
         if (act === '歩く' && a.e < 60 * size) act = '探す';
         a.act = act;
         // 繁殖: 体力があり、近くに同種のオスがいるとき
-        if (a.age > 1.2 && a.e > 75 * size && mate && w.inds.length < MAXN && rnd() < 0.5 * Math.max(0.03, 1 - w.inds.length / 260)) {
+        if (think && a.age > 1.2 && a.e > 75 * size && mate && w.inds.length < MAXN && rnd() < Math.min(0.9, 1.5 * (dt / 0.1)) * Math.max(0.03, 1 - w.inds.length / 600)) {
           const kids = 1 + (rnd() < 0.3 ? 1 : 0);
           for (let k = 0; k < kids; k++) {
             const cg = g.map((v, j) => clamp((v + mate.g[j]) / 2 + (rnd() + rnd() + rnd() - 1.5) * (j === 2 ? 0.004 : 0.07) * GS[j] * 1.7, j === 2 ? 0 : 0.3, j === 2 ? 1 : 2.6));
@@ -148,13 +151,13 @@
     function epoch() {
       for (const sp of w.species) if (sp.ext === null && sp.count <= 0) { sp.ext = w.year; w.extinctCount++; say('絶滅: ' + sp.name, 'ext'); }
       for (const sp of w.species.slice()) {
-        if (sp.ext !== null || sp.count < 22) continue;
+        if (sp.ext !== null || sp.count < 16) continue;
         const mem = w.inds.filter((a) => a.sp === sp.id);
         for (const gene of [0, 2, 1]) {
           const vals = mem.map((a) => a.g[gene]).sort((x, y) => x - y);
           let best = 0, bi = -1;
           for (let i = 5; i < vals.length - 5; i++) { const gap = vals[i + 1] - vals[i]; if (gap > best) { best = gap; bi = i; } }
-          if (bi >= 0 && best > 0.28 * GS[gene]) {
+          if (bi >= 0 && best > 0.2 * GS[gene]) {
             const cut = (vals[bi] + vals[bi + 1]) / 2, hi = mem.filter((a) => a.g[gene] > cut);
             const cen = [0, 1, 2, 3, 4].map((j) => hi.reduce((s, a) => s + a.g[j], 0) / hi.length);
             const vis = Object.assign({}, sp.vis); vis.name = nm() + sp.vis.name.slice(-1); vis.col = sp.vis.col.map((v) => clamp(v * (0.75 + 0.5 * rnd()), 0, 1)); vis.col2 = sp.vis.col2.map((v) => clamp(v * (0.75 + 0.5 * rnd()), 0, 1));
@@ -183,7 +186,7 @@
     }
     function run(years) { // 経過した年数だけ進める(1ステップ=0.1年)。多すぎるときは打ち切って、進んだ年数を返す
       let n = 0; const t0 = Date.now();
-      while (years > 0 && Date.now() - t0 < 6) { const d = Math.min(DT, years); step(d); years -= d; n++; }
+      while (years > 0 && Date.now() - t0 < 4) { const d = Math.min(DT, years); step(d); years -= d; n++; }
       return n * DT;
     }
     function list() {
@@ -199,7 +202,7 @@
       sp.filter((s) => s.parent < 0).forEach((s) => walk(s.id, 0));
       return out;
     }
-    function plantFrac() { let s = 0; for (let i = 0; i < G * G; i++) s += (gA[i] + gB[i]) / 2 / Math.max(0.05, w.cover * fert[i]); return clamp(s / (G * G), 0, 1.2); }
+    function plantFrac() { let s = 0; for (let i = 0; i < G * G; i++) { let m = 0; for (let k = 0; k < NR; k++) m += gR[k][i]; s += m / NR / Math.max(0.05, w.cover * fert[i]); } return clamp(s / (G * G), 0, 1.2); }
     w.step = step; w.run = run; w.event = event; w.list = list; w.tree = tree; w.plantFrac = plantFrac; w.L = L;
     w.stats = () => ({ year: w.year, n: w.inds.length, alive: w.species.filter((s) => s.ext === null && s.count > 0).length, total: w.species.length, extinct: w.extinctCount, events: w.events, born: w.born, died: w.died });
     return w;

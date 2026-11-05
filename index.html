@@ -42,6 +42,9 @@
   .mk { position: absolute; left: 0; top: 0; pointer-events: auto; background: rgba(8,12,28,.78); border: 1px solid var(--accent);
     color: var(--fg); border-radius: 999px; padding: 4px 10px; font-size: 12px; min-height: 0 !important; white-space: nowrap; }
   .mk.pl { border-color: var(--accent2); }
+  .mk.obj { border-color: #c084fc; font-size: 11px; padding: 2px 8px; }
+  #objP { left: 16px; top: 250px; width: 330px; max-height: calc(100dvh - 450px); overflow-y: auto; font-size: 12px; line-height: 1.5; }
+  #objP button.hit { display: block; width: 100%; text-align: left; margin-top: 4px; }
   #fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity .22s; }
   #fade.on { opacity: 1; }
   #toast { position: fixed; left: 50%; top: 18px; transform: translateX(-50%); background: var(--panel);
@@ -54,7 +57,7 @@
   .lbl { }
   #bUI { position: fixed; right: 8px; top: 50%; z-index: 30; width: 38px; height: 38px; padding: 0; border-radius: 50%; opacity: .55; font-size: 18px; }
   #bUI:hover { opacity: 1; }
-  body.hideui #info, body.hideui #opts, body.hideui #bar, body.hideui #civ, body.hideui #lifeP, body.hideui #nearP, body.hideui #ecoP, body.hideui #scnP, body.hideui #markers { display: none !important; }
+  body.hideui #info, body.hideui #opts, body.hideui #bar, body.hideui #civ, body.hideui #lifeP, body.hideui #nearP, body.hideui #objP, body.hideui #ecoP, body.hideui #scnP, body.hideui #markers { display: none !important; }
   #ecoP { right: 16px; top: 64px; width: 340px; max-height: calc(100dvh - 300px); overflow-y: auto; font-size: 12px; line-height: 1.5; }
   #ecoP .tr div { white-space: nowrap; }
   #ecoP .lg { max-height: 120px; overflow-y: auto; margin-top: 4px; border-top: 1px solid var(--line); padding-top: 4px; }
@@ -104,6 +107,7 @@
     #note { display: none; }
     #toast { top: auto; bottom: 230px; max-width: 90vw; text-align: center; }
     #ecoP, #scnP { left: 8px; right: 8px; top: auto; bottom: 215px; width: auto; max-height: 36vh; }
+    #objP { left: 8px; right: 8px; top: auto; bottom: 215px; width: auto; max-height: 34vh; }
     #nearP { left: 8px; right: 8px; top: auto; bottom: 215px; width: auto; max-height: 34vh; }
     #lifeP { left: 8px; right: 8px; top: auto; bottom: 215px; width: auto; max-height: 34vh; }
     #civ { left: 8px; right: 8px; top: auto; bottom: 215px; width: auto; max-height: 34vh; }
@@ -162,6 +166,9 @@
     <button id="bNear" title="近くの生き物を一匹ずつ見る" style="display:none">🐾<span class="lbl"> 生き物</span></button>
     <button id="bEco" title="生態系(進化・絶滅)" style="display:none">🧬<span class="lbl"> 生態系</span></button>
     <button id="bScn" title="いまの地球からのシナリオ" style="display:none">🌍<span class="lbl"> 地球</span></button>
+    <button id="bObj" title="いろいろな天体(ブラックホールなど)">🌌<span class="lbl"> 天体</span></button>
+    <button id="bFly" title="自由飛行(宇宙・銀河・恒星系)">🚀<span class="lbl"> 飛行</span></button>
+    <button id="bBk" title="押している間、後ろへ進む" style="display:none">⬇<span class="lbl"> 後退</span></button>
     <button id="bWalk" title="押している間、前に進む(PCは W/↑ キー)" style="display:none">🚶<span class="lbl"> 前進</span></button>
     <button id="bRev" title="逆再生">◀<span class="lbl"> 逆再生</span></button>
     <button id="bPause" title="一時停止">⏸</button>
@@ -204,6 +211,11 @@
   <div class="row" style="justify-content:space-between"><b>🌍 いまの地球からのシナリオ(仮説)</b><button class="small" id="scnX">✕</button></div>
   <div id="scnBody"></div>
 </div>
+<div id="objP" class="panel" style="display:none">
+  <div class="row" style="justify-content:space-between"><b>🌌 いろいろな天体</b><button class="small" id="objX">✕</button></div>
+  <div style="color:var(--dim);font-size:11px">押すと見に行けます。性質は実在の物理の式で計算し、見え方(重力レンズなど)も式にもとづいて描きます。銀河の画面にも、紫の印で天体が出ています。</div>
+  <div id="objBody"></div>
+</div>
 <div id="nearP" class="panel" style="display:none">
   <div class="row" style="justify-content:space-between"><b>🐾 近くの生き物(一匹ずつ)</b><button class="small" id="nearX">✕</button></div>
   <div style="color:var(--dim);font-size:11px">押すと、その個体のほうを向いて追います。状態(体力・行動)は個体の番号と時刻から決まる仮の値です。</div>
@@ -218,13 +230,13 @@
 <div id="toast"></div>
 <div id="fatal"><div id="fatalMsg"></div></div>
 
-<script src="cosmology.js?v=16"></script>
-<script src="astro.js?v=16"></script>
-<script src="life.js?v=16"></script>
-<script src="civ.js?v=16"></script>
-<script src="eco.js?v=16"></script>
-<script src="scenario.js?v=16"></script>
-<script src="scenes.js?v=16"></script>
+<script src="cosmology.js?v=19"></script>
+<script src="astro.js?v=19"></script>
+<script src="life.js?v=19"></script>
+<script src="civ.js?v=19"></script>
+<script src="eco.js?v=19"></script>
+<script src="scenario.js?v=19"></script>
+<script src="scenes.js?v=19"></script>
 <script>
 (async function () {
 'use strict';
@@ -838,7 +850,7 @@ function simulate(want, budget, abs) {
 }
 
 // ------------------------------------------------------------------ カメラ
-const cam = { az: 0.6, el: 0.35, dist: 2.2, rot: true };
+const cam = { az: 0.6, el: 0.35, dist: 2.2, rot: true, fly: false, pos: [0, 0, 2.2], spd: 1 };
 function perspective(fovy, aspect, near, far) {
   const f = 1 / Math.tan(fovy / 2), nf = 1 / (near - far);
   return new Float32Array([f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, far * nf, -1, 0, 0, far * near * nf, 0]);
@@ -868,14 +880,14 @@ canvas.addEventListener('pointermove', (e) => {
   const c = activeCam();
   if (tapInfo) tapInfo.moved += Math.abs(e.clientX - prev[0]) + Math.abs(e.clientY - prev[1]);
   if (ptrs.size === 1) { const k = c.min > 1 ? 0.0025 * Math.min(2, Math.max(0.3, c.dist - 1)) : 0.005; c.az -= (e.clientX - prev[0]) * k; c.el = Math.max(-1.5, Math.min(1.5, c.el + (e.clientY - prev[1]) * k)); }
-  else if (ptrs.size === 2) { const [p, q] = [...ptrs.values()]; const d = Math.hypot(p[0] - q[0], p[1] - q[1]); if (pinch0 > 0) c.dist = clampDist(c, c.dist * pinch0 / d); pinch0 = d; }
+  else if (ptrs.size === 2) { const [p, q] = [...ptrs.values()]; const d = Math.hypot(p[0] - q[0], p[1] - q[1]); if (pinch0 > 0) { if (c.fly) c.spd = Math.min(40, Math.max(0.02, (c.spd || 1) * pinch0 / d)); else c.dist = clampDist(c, c.dist * pinch0 / d); } pinch0 = d; }
 });
 const upPtr = (e) => {
   if (tapInfo && ptrs.size === 1 && tapInfo.moved < 8 && performance.now() - tapInfo.t < 400 && scenes && scenes.active()) scenes.onTap(e.clientX, e.clientY);
   tapInfo = null; ptrs.delete(e.pointerId); pinch0 = 0;
 };
 canvas.addEventListener('pointerup', upPtr); canvas.addEventListener('pointercancel', (e) => { tapInfo = null; ptrs.delete(e.pointerId); pinch0 = 0; });
-canvas.addEventListener('wheel', (e) => { e.preventDefault(); const c = activeCam(); c.dist = clampDist(c, c.dist * Math.exp(e.deltaY * 0.001)); }, { passive: false });
+canvas.addEventListener('wheel', (e) => { e.preventDefault(); const c = activeCam(); if (c.fly) c.spd = Math.min(40, Math.max(0.02, (c.spd || 1) * Math.exp(-e.deltaY * 0.001))); else c.dist = clampDist(c, c.dist * Math.exp(e.deltaY * 0.001)); }, { passive: false });
 
 // ------------------------------------------------------------------ UI
 const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -988,7 +1000,7 @@ function setEventsVisible(v) { $('events').style.display = v ? '' : 'none'; $('t
 scenes = Scenes.create({
   device, ctx, canvas, format, astro: Astro, life: Life, cosmo, coarse, toast, fmtYears,
   getCiv: (key) => (civ && civKey === key ? civ : null),
-  eco: Eco, getEcoRate: () => Number($('ecoRate').value),
+  getSeed: () => SEED, eco: Eco, getEcoRate: () => Number($('ecoRate').value),
   getDir: () => st.dir, getMult: () => st.mult, getExpo: () => Math.pow(10, Number($('expo').value)),
   ui: { markers: $('markers') },
   setInfo(o) {
@@ -1003,7 +1015,7 @@ scenes = Scenes.create({
     $('bLand').style.display = kind === 'planet' ? '' : 'none';
     $('bLife').style.display = kind === 'cosmos' || kind === 'galaxy' ? '' : 'none';
     if (kind !== 'galaxy' && kind !== 'cosmos') $('lifeP').style.display = 'none';
-    $('bWalk').style.display = kind === 'surface' ? '' : 'none';
+    updateFlyUI(kind);
     $('bNear').style.display = kind === 'surface' ? '' : 'none';
     $('bEco').style.display = kind === 'surface' && scenes.eco() ? '' : 'none';
     $('bScn').style.display = kind === 'surface' && scenes.civTarget() && scenes.civTarget().real ? '' : 'none';
@@ -1018,7 +1030,7 @@ scenes = Scenes.create({
 });
 $('bLand').onclick = () => scenes.land();
 {
-  const w = $('bWalk'), on = (v) => (e) => { e.preventDefault(); scenes.setWalk(v); };
+  const w = $('bWalk'), on = (v) => (e) => { e.preventDefault(); scenes.setWalk(v); cosWalk = v; };
   w.addEventListener('pointerdown', on(1)); w.addEventListener('pointerup', on(0)); w.addEventListener('pointerleave', on(0)); w.addEventListener('pointercancel', on(0));
 }
 // ------------------------------------------------------------------ 生命のいる惑星へ飛ぶ
@@ -1163,10 +1175,50 @@ function paintCiv(force) {
   paintPerson();
   body.innerHTML = '<div style="margin-top:6px">世界のシード <b>' + civSeedNo + '</b> ・ ' + fmtYears(s.year) + '経過 ・ 追跡中 ' + fmtPop(s.pop) + '人 ・ 技術 ' + s.items + '(作られた総数 ' + s.total + ')' + (s.ended ? ' <b style="color:#f87171">途絶えた</b>' : '') + '</div><div class="bars" style="margin-top:6px">' + bars + '</div><div class="ms">' + ms + '</div><div class="tl">' + tl + '</div>' + indHtml + progHtml;
 }
+// ------------------------------------------------------------------ 自由飛行と天体
+const fkeys = {}; let cosWalk = 0;
+window.addEventListener('keydown', (e) => { if (!/INPUT|TEXTAREA|SELECT/.test((e.target || {}).tagName || '')) fkeys[e.key.toLowerCase()] = true; });
+window.addEventListener('keyup', (e) => { fkeys[e.key.toLowerCase()] = false; });
+function cosmosFly(dt) {
+  const fw = [Math.cos(cam.el) * Math.sin(cam.az), Math.sin(cam.el), Math.cos(cam.el) * Math.cos(cam.az)], r = [Math.cos(cam.az), 0, -Math.sin(cam.az)];
+  const fi = cosWalk + (fkeys.w || fkeys.arrowup ? 1 : 0) - (fkeys.s || fkeys.arrowdown ? 1 : 0), si = (fkeys.d || fkeys.arrowright ? 1 : 0) - (fkeys.a || fkeys.arrowleft ? 1 : 0), vi = (fkeys.e || fkeys[' '] ? 1 : 0) - (fkeys.q ? 1 : 0);
+  const sp = 0.6 * (cam.spd || 1) * (fkeys.shift ? 5 : 1) * dt;
+  for (let k = 0; k < 3; k++) cam.pos[k] = Math.max(-4, Math.min(4, cam.pos[k] + fw[k] * fi * sp + r[k] * si * sp + (k === 1 ? vi * sp : 0)));
+}
+function flyingNow() { return scenes.active() ? scenes.flying() : cam.fly; }
+function updateFlyUI(kind) {
+  kind = kind || (scenes.active() ? scenes.kind : 'cosmos');
+  const canFly = kind === 'cosmos' || kind === 'galaxy' || kind === 'system', fl = canFly && flyingNow();
+  $('bFly').style.display = canFly ? '' : 'none'; $('bFly').classList.toggle('on', fl);
+  $('bWalk').style.display = kind === 'surface' || fl ? '' : 'none'; $('bBk').style.display = fl ? '' : 'none';
+  $('bObj').style.display = kind === 'cosmos' || kind === 'galaxy' ? '' : 'none';
+  if (kind !== 'cosmos' && kind !== 'galaxy') $('objP').style.display = 'none';
+}
+$('bFly').onclick = () => {
+  const kind = scenes.active() ? scenes.kind : 'cosmos';
+  if (kind === 'cosmos') {
+    if (!cam.fly) { const fw = [Math.cos(cam.el) * Math.sin(cam.az), Math.sin(cam.el), Math.cos(cam.el) * Math.cos(cam.az)]; cam.pos = fw.map((v) => v * cam.dist); cam.az += Math.PI; cam.el = -cam.el; cam.fly = true; cam.spd = 1; clearHaloMarks(); }
+    else { const p = cam.pos, d = Math.max(0.5, Math.min(8, Math.hypot(...p))); cam.fly = false; cam.dist = d; cam.az = Math.atan2(p[0], p[2]); cam.el = Math.asin(p[1] / (Math.hypot(...p) || 1)); }
+  } else scenes.setFly(!scenes.flying());
+  updateFlyUI(kind);
+  if (flyingNow()) toast('自由飛行: ドラッグで向きを変え、W/A/S/D・Q/E か 🚶前進・⬇後退ボタンで移動。ホイール/ピンチで速さを変えます', 5500);
+};
+{
+  const hold = (id, v) => { const el = $(id), on = (x) => (e) => { e.preventDefault(); scenes.setWalk(x); cosWalk = x; }; el.addEventListener('pointerdown', on(v)); el.addEventListener('pointerup', on(0)); el.addEventListener('pointerleave', on(0)); el.addEventListener('pointercancel', on(0)); };
+  hold('bBk', -1);
+}
+const OBJ_BLURB = { bh: '太陽の数倍〜数十倍の質量の星が崩壊してできる。光も出られない。', smbh: '銀河の中心にあり、太陽の数百万〜数十億倍。ジェットを出すとクエーサーとして輝く。', ns: '星の芯が潰れた、街ほどの大きさの超高密度の星。灯台のように脈動する。', magnetar: '中性子星のうち、宇宙でいちばん強い磁場をもつもの。', wd: '太陽くらいの星の最期に残る、地球ほどの大きさの高密度の芯。', snr: '大きな星が爆発したあとに広がるガスの殻。', neb: '星が生まれるガスの雲。若い星の光で輝く。', pn: '太陽くらいの星が外層を放出したガスの殻。', gc: '数十万個の古い星が球状に集まった星団。' };
+$('objX').onclick = () => { $('objP').style.display = 'none'; };
+$('bObj').onclick = () => {
+  const v = $('objP').style.display === 'none'; $('objP').style.display = v ? '' : 'none';
+  if (!v) return;
+  const el = $('objBody'); el.innerHTML = '';
+  Object.keys(Astro.OBJ_TYPES).forEach((k) => { const t = Astro.OBJ_TYPES[k], b = document.createElement('button'); b.className = 'small hit'; b.innerHTML = t.icon + ' <b>' + t.jp + '</b><br><span style="color:var(--dim)">' + OBJ_BLURB[k] + '</span>'; b.onclick = () => { $('objP').style.display = 'none'; clearHaloMarks(); scenes.viewObject(k); }; el.appendChild(b); });
+};
 function enterScene(fn) { savedDir = st.dir; fadeTo(fn); }
 function scenesOnEnterCosmos() {
   lastInfo = '';
-  $('bLand').style.display = 'none'; $('bWalk').style.display = 'none'; $('bLife').style.display = '';
+  $('bLand').style.display = 'none'; $('bWalk').style.display = 'none'; $('bLife').style.display = ''; updateFlyUI('cosmos');
   $('dl').style.display = ''; $('dl2').style.display = 'none'; $('bBack').style.display = 'none'; $('bZoom').style.display = ''; setEventsVisible(true); setDir(savedDir);
   setSpeed($('speed').value);
 }
@@ -1233,8 +1285,18 @@ $('bUI').onclick = () => document.body.classList.toggle('hideui');
 window.addEventListener('keydown', (e) => { if (e.key === 'h' && !/INPUT|TEXTAREA|SELECT/.test((e.target || {}).tagName || '')) document.body.classList.toggle('hideui'); });
 
 // ------------------------------------------------------------------ 描画
+// 地表・天体の画面は重いので、描画の細かさを自動で調整する(速度が足りないと下げ、余裕があると上げる)
+let rScale = 1, ema = 0.017, scaleN = 0;
+function adaptScale(dtReal) {
+  const heavy = scenes && (scenes.kind === 'surface' || scenes.kind === 'object');
+  if (!heavy) { ema = 0.017; scaleN = 0; return; }
+  if (scaleN === 0) rScale = Math.min(rScale, 0.8); // 入った直後は少し粗めから始め、余裕があれば上げる
+  ema = ema * 0.92 + Math.min(dtReal, 0.2) * 0.08;
+  if (++scaleN % 20 === 0) { if (ema > 0.028) rScale = Math.max(0.3, rScale * 0.85); else if (ema < 0.0185) rScale = Math.min(1, rScale * 1.06); }
+}
 function resize() {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const heavy = scenes && (scenes.kind === 'surface' || scenes.kind === 'object');
+  const dpr = Math.min(window.devicePixelRatio || 1, 2) * (heavy ? (coarse ? Math.min(rScale, 0.7) : rScale) : 1);
   const w = Math.max(1, Math.floor(canvas.clientWidth * dpr)), h = Math.max(1, Math.floor(canvas.clientHeight * dpr));
   if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
   return dpr;
@@ -1243,8 +1305,9 @@ const ru = new Float32Array(28);
 function render(tReal, dpr) {
   const a = cosmo.aOfT(st.t);
   const aspect = canvas.width / canvas.height;
-  const eye = [cam.dist * Math.cos(cam.el) * Math.sin(cam.az), cam.dist * Math.sin(cam.el), cam.dist * Math.cos(cam.el) * Math.cos(cam.az)];
-  const vp = mul(perspective(0.9, aspect, 0.02, 40), lookAt(eye, [0, 0, 0], [0, 1, 0]));
+  const fw = [Math.cos(cam.el) * Math.sin(cam.az), Math.sin(cam.el), Math.cos(cam.el) * Math.cos(cam.az)];
+  const eye = cam.fly ? cam.pos : [cam.dist * fw[0], cam.dist * fw[1], cam.dist * fw[2]];
+  const vp = mul(perspective(0.9, aspect, 0.02, 40), lookAt(eye, cam.fly ? [eye[0] + fw[0], eye[1] + fw[1], eye[2] + fw[2]] : [0, 0, 0], [0, 1, 0]));
   const fade = smooth(A_REC, A_REC * 4, a);
   const plasma = 1 - smooth(A_REC * 0.97, A_REC * 2.2, a);
   const boxScale = Math.min(1.5, Math.max(0.25, Math.pow(a, 0.2)));
@@ -1283,9 +1346,11 @@ function updateHud() {
 let last = performance.now(), t0Real = last;
 function frame(now) {
   const dtReal = Math.min(0.1, (now - last) / 1000); last = now;
+  adaptScale(dtReal);
   const dpr = resize();
   if (scenes.active()) { st.logMode = false; civTick(dtReal); scenes.frame(dtReal, dpr); paintNear(); paintEco(); requestAnimationFrame(frame); return; }
-  if (cam.rot && ptrs.size === 0) cam.az += 0.03 * dtReal;
+  if (cam.fly) cosmosFly(dtReal);
+  else if (cam.rot && ptrs.size === 0) cam.az += 0.03 * dtReal;
   st.logMode = false;
   if (st.seek !== null) {
     const goal = Math.min(Math.max(st.seek, T0), T_MAX);

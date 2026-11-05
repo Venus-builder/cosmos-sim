@@ -53,3 +53,19 @@ const a1 = JSON.stringify(A.makeSystem({ seed: 77, mass: 0.8, Z: 0.7, age: 5 }))
 assert.strictEqual(a1, JSON.stringify(A.makeSystem({ seed: 77, mass: 0.8, Z: 0.7, age: 5 })), '同じシードなら同じ恒星系');
 
 console.log('astro: all tests passed (planets in Z=1 systems: %d/200)', withPlanets);
+
+// ---- いろいろな天体
+{
+  for (const t of Object.keys(A.OBJ_TYPES)) {
+    const o = A.makeObject(t, 123);
+    assert.ok(o.rows.length >= 4 && o.rows.every((r) => r[0] && r[1]), t + ' の物理量が出る');
+    assert.strictEqual(JSON.stringify(o), JSON.stringify(A.makeObject(t, 123)), '同じシードなら同じ天体');
+  }
+  const bh = A.makeObject('bh', 5, null);
+  assert.ok(Math.abs(bh.Rs / 1000 - 2.953 * bh.mass) < 0.01 * bh.mass, 'シュワルツシルト半径は 2.95 km × 質量');
+  const ns = A.makeObject('ns', 7);
+  assert.ok(ns.R > 10 && ns.R < 14 && ns.mass > 1.1 && ns.mass < 2.2, '中性子星の質量と半径');
+  const gal = A.galaxyFromHalo(1.5e12, A.rng(9), 13.8), objs = A.genObjects(gal, 13.8, A.rng(10));
+  assert.ok(objs.some((o) => o.type === 'smbh') && objs.length > 30, '銀河に天体が分布する');
+  console.log('astro(objects): ok');
+}

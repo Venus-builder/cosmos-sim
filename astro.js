@@ -247,7 +247,109 @@
     return out;
   }
 
+  // ---- いろいろな天体(星の残骸・星雲・星団・巨大ブラックホール) ----
+  // 物理量は標準的な式から計算する。個々の天体の性質は乱数で決まる(同じシードなら同じ)。
+  const OBJ_TYPES = {
+    bh: { jp: 'ブラックホール(恒星質量)', icon: '🕳', kind: 0 },
+    smbh: { jp: '超大質量ブラックホール(銀河の中心)', icon: '🌀', kind: 1 },
+    ns: { jp: '中性子星・パルサー', icon: '⚡', kind: 2 },
+    magnetar: { jp: 'マグネター(超強磁場の中性子星)', icon: '🧲', kind: 2 },
+    wd: { jp: '白色矮星', icon: '⚪', kind: 4 },
+    snr: { jp: '超新星残骸', icon: '💥', kind: 3 },
+    neb: { jp: '星雲(星が生まれる場所)', icon: '🌌', kind: 3 },
+    pn: { jp: '惑星状星雲(太陽のような星の最期)', icon: '🔵', kind: 3 },
+    gc: { jp: '球状星団', icon: '✨', kind: 5 },
+  };
+  function makeObject(type, seed, hint) {
+    const r = rng(seed), T = OBJ_TYPES[type], o = { type, seed, jp: T.jp, icon: T.icon, kind: T.kind, rows: [] };
+    const G = 6.674e-11, c = 2.998e8, Msun = 1.989e30;
+    const row = (k, v) => o.rows.push([k, v]);
+    if (type === 'bh' || type === 'smbh') {
+      let M = type === 'bh' ? 5 * Math.pow(1 - 0.97 * r(), -0.5) : (hint && hint.mass) || r.logRange(1e6, 4e9); if (type === 'bh') M = Math.min(M, 60);
+      o.mass = M; o.spin = r.range(0.2, 0.95);
+      const Rs = 2 * G * M * Msun / (c * c); // m
+      o.Rs = Rs; o.sub = type === 'smbh' ? 1 : 0;
+      const km = Rs / 1000;
+      row('質量', (M >= 1e5 ? M.toExponential(2) : M.toFixed(1)) + ' M☉');
+      row('事象の地平線の半径(シュワルツシルト半径)', km < 1e6 ? km.toFixed(1) + ' km' : (km / 1.496e8).toFixed(km / 1.496e8 < 10 ? 2 : 1) + ' AU');
+      row('光子球(光が円軌道を回る半径)', '地平線の 1.5 倍');
+      row('最内縁安定円軌道(回転しない場合)', '地平線の 3 倍');
+      row('ホーキング温度', (6.17e-8 / M).toExponential(1) + ' K(宇宙背景放射 2.7 K より低く、蒸発より吸収が勝つ)');
+      row('蒸発にかかる時間', (2.1e67 * Math.pow(M, 3)).toExponential(1) + ' 年(理論値)');
+      row('円盤の様子', type === 'smbh' ? '降着円盤とジェット(クエーサー・活動銀河核の姿)' : '落ち込む物質の降着円盤(明るさは物質の供給量しだい)');
+      row('見え方', '光が曲げられ、円盤の裏側や真上まで見えます(重力レンズ)。左右の明るさの差はドップラー効果');
+    } else if (type === 'ns' || type === 'magnetar') {
+      const mag = type === 'magnetar';
+      o.mass = r.range(1.2, 2.1); o.R = r.range(11, 13);
+      o.P = mag ? r.range(2, 10) : r.logRange(0.0015, 6); o.B = mag ? Math.pow(10, r.range(14, 15.3)) : Math.pow(10, r.range(8, 13));
+      o.tilt = r.range(0.4, 1.1);
+      row('質量 / 半径', o.mass.toFixed(2) + ' M☉ / ' + o.R.toFixed(1) + ' km(街ひとつぶんの大きさ)');
+      row('平均密度', (o.mass * Msun / (4 / 3 * Math.PI * Math.pow(o.R * 1000, 3))).toExponential(1) + ' kg/m³(原子核なみ。角砂糖1個で約1億トン)');
+      row('自転周期', o.P < 1 ? (o.P * 1000).toFixed(1) + ' ミリ秒' : o.P.toFixed(2) + ' 秒');
+      row('磁場', o.B.toExponential(1) + ' ガウス' + (mag ? '(宇宙でいちばん強い磁場)' : ''));
+      row('光円柱半径(これより外では磁場が光速で回れない)', (c * o.P / (2 * Math.PI) / 1000).toExponential(1) + ' km');
+      row('表面の脱出速度', (Math.sqrt(2 * G * o.mass * Msun / (o.R * 1000)) / c).toFixed(2) + ' c(光速の約半分)');
+      row('見え方', '自転軸と磁軸がずれ、磁極から出るビームが灯台のように回ります(絵では実際より遅くしています)');
+    } else if (type === 'wd') {
+      o.mass = Math.min(1.35, 0.5 + 0.7 * r() * r() + 0.1); o.T = r.logRange(7000, 40000);
+      const Rkm = 7000 * Math.pow(o.mass / 0.6, -1 / 3) * Math.sqrt(Math.max(0.05, 1 - Math.pow(o.mass / 1.44, 4 / 3)));
+      o.R = Rkm;
+      row('質量 / 半径', o.mass.toFixed(2) + ' M☉ / ' + Math.round(Rkm) + ' km(地球ほどの大きさ)');
+      row('平均密度', (o.mass * Msun / (4 / 3 * Math.PI * Math.pow(Rkm * 1000, 3))).toExponential(1) + ' kg/m³');
+      row('表面温度', Math.round(o.T) + ' K(年とともに冷えていく)');
+      row('チャンドラセカール限界', '1.44 M☉(これを超えると爆発する Ia 型超新星)');
+      row('正体', '太陽ほどの星が燃料を使い切り、外層を放出したあとに残る、電子の縮退圧で支えられた芯');
+    } else if (type === 'snr' || type === 'pn' || type === 'neb') {
+      o.sub = type === 'snr' ? 0 : type === 'neb' ? 1 : 2;
+      if (type === 'snr') { o.age = r.logRange(500, 40000); o.Rpc = 12 * Math.pow(o.age / 1e4, 0.4); o.v = 0.4 * o.Rpc * 3.086e13 / (o.age * 3.156e7); o.pulsar = r() < 0.5;
+        row('年齢', Math.round(o.age) + ' 年'); row('殻の半径', o.Rpc.toFixed(1) + ' パーセク'); row('広がる速さ', Math.round(o.v) + ' km/s(光速の約' + (o.v / 3e5 * 100).toFixed(1) + '%)');
+        row('もとの星', '太陽の8倍以上の星が燃料を使い切り、芯が重力崩壊して爆発(II 型)'); row('中心', o.pulsar ? '中性子星(パルサー)が残っている' : 'ブラックホールまたは見えない中性子星'); row('色', '緑・青緑は酸素、赤は水素の輝線');
+      } else if (type === 'neb') { o.Rpc = r.range(4, 40); o.nO = 1 + Math.floor(r() * 5);
+        row('広がり', Math.round(o.Rpc * 2) + ' パーセク'); row('中の若い星(O・B型)', o.nO + ' 個ほど(紫外線でガスを光らせている)'); row('ガスの温度', '約10,000 K'); row('色', '赤は水素、青緑は酸素');
+        row('これから', '数百万年のうちに、星が生まれた領域から星団ができる');
+      } else { o.Rpc = r.range(0.1, 0.6); o.age = r.range(2000, 20000); o.mass = r.range(0.55, 0.9);
+        row('年齢', Math.round(o.age) + ' 年(星の一生の中ではほんの一瞬)'); row('広がり', (o.Rpc * 2).toFixed(2) + ' パーセク'); row('中心の星', '白色矮星になっていく途中の高温の芯(約' + Math.round(r.range(50, 120)) + ',000 K)');
+        row('見え方', '放出されたガスの殻が、中心の星の紫外線で光っています(太陽もおよそ50億年後にこうなります)');
+      }
+    } else if (type === 'gc') {
+      o.N = Math.round(r.logRange(1e5, 1.2e6)); o.Rpc = r.range(10, 35); o.age = r.range(10.5, 13);
+      row('星の数', o.N.toLocaleString() + ' 個'); row('半径', o.Rpc.toFixed(0) + ' パーセク(中心ほど、星どうしが近い)'); row('年齢', o.age.toFixed(1) + ' Gyr(宇宙で最も古い天体の仲間)');
+      row('星の種類', '重元素の少ない、赤くて古い星が中心。青い星(青色はぐれ星)が少し混じる'); row('中心の密度', '太陽近くの星の密度の約1万倍。夜空は昼のように明るい');
+    }
+    o.name = T.icon + ' ' + T.jp;
+    return o;
+  }
+  // 銀河の中の天体の分布(位置は r,th,z[kpc]。星と同じように銀河の回転に乗る)
+  function genObjects(gal, tNow, r) {
+    const out = [], hern = (a) => { const u = Math.min(0.999, r()); const s = Math.sqrt(u); return a * s / (1 - s); };
+    const disk = (young) => {
+      if (gal.type === 'spiral') {
+        const rr = Math.min(gal.R * 1.2, gal.h * (-Math.log(1 - r()) - Math.log(1 - r())));
+        const th = young ? 4.0 * Math.log(Math.max(rr, 0.3)) + (r() < 0.5 ? 0 : Math.PI) + r.gauss() * 0.25 : r() * TAU;
+        return { r: rr, th, z: gal.h * 0.12 * r.gauss() * (young ? 0.3 : 1.5) };
+      }
+      const rad = hern((gal.Re || gal.h * 2 || 2) / 1.8), ct = r.range(-1, 1), ph = r() * TAU, st = Math.sqrt(1 - ct * ct), x = rad * st * Math.cos(ph), y = rad * st * Math.sin(ph);
+      return { r: Math.hypot(x, y), th: Math.atan2(y, x), z: rad * ct * 0.75 };
+    };
+    const halo = () => { const rad = hern(12), ct = r.range(-1, 1), ph = r() * TAU, st = Math.sqrt(1 - ct * ct), x = rad * st * Math.cos(ph), y = rad * st * Math.sin(ph); return { r: Math.hypot(x, y), th: Math.atan2(y, x), z: rad * ct }; };
+    const add = (type, pos, hint) => out.push(Object.assign({ type, id: out.length, seed: Math.floor(r() * 1e9) }, pos, { hint: hint || null }));
+    const Mbh = Math.max(1e5, Math.min(4e10, 1.5e-3 * gal.Mstar * (gal.type === 'spiral' ? Math.max(gal.fb, 0.1) : 1)));
+    add('smbh', { r: 0, th: 0, z: 0 }, { mass: Mbh });
+    const young = tNow > 1;
+    for (let i = 0; i < 8; i++) add('bh', disk(false));
+    for (let i = 0; i < 9; i++) add(r() < 0.12 ? 'magnetar' : 'ns', disk(false));
+    for (let i = 0; i < 10; i++) add('wd', disk(false));
+    if (young && gal.type !== 'elliptical' && gal.type !== 'cD') {
+      for (let i = 0; i < 6; i++) add('snr', disk(true));
+      for (let i = 0; i < 8; i++) add('neb', disk(true));
+      for (let i = 0; i < 4; i++) add('pn', disk(false));
+    }
+    for (let i = 0; i < 8; i++) add('gc', halo());
+    return out;
+  }
+
   return {
+    OBJ_TYPES, makeObject, genObjects,
     rng, hashSeed, sampleMass, starL, starR, starT, starLife, starFromMass, spectralClass, blackbody,
     teq, jeans, solveKepler, orbitPos, orbitPoints, classify, makeSystem, solarSystem,
     galaxyType, TYPE_JP, galaxyFromHalo, genStars, metallicity,
