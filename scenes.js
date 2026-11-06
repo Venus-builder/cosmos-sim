@@ -982,7 +982,7 @@ function create(env) {
   // 生命のいる惑星を探す(太陽に近い恒星を順に調べる。結果は少しずつ cb に渡す)
   function scanLife(cb) {
     if (S.kind !== 'galaxy') return false;
-    const g = S.gal, tok = S.scanTok = {}, start = Math.floor(astro.rng(g.seed ^ 0x51ed27)() * g.n);
+    const g = S.gal, tok = S.scanTok = {}, start = Math.floor(Math.random() * g.n);
     let scanned = 0; const found = S.gfound = [];
     const chunk = () => {
       if (S.scanTok !== tok || S.kind !== 'galaxy') return;
