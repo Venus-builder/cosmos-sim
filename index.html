@@ -132,7 +132,7 @@
 
 <details id="opts" class="panel" open>
   <summary>設定</summary>
-  <div style="margin:6px 0 10px;color:#9fb4ff;font-size:13px;font-weight:bold">アプリ バージョン：v39</div><details style="font-size:12px;margin-bottom:8px"><summary>変更履歴</summary><div>v30：生命の起源を化学反応から確率的に開始し、環境依存の生物多様化と地表滞在中の文明自動進行を追加。<br>v31：知的生命の種族名と生命起源の反応経路を地表情報に表示。<br>v32：地表時間を宇宙共通の再生・逆再生・速度操作に接続し、生態系の時間進行を連動。<br>v33：文明初期化処理に混入した改行文字を修正し、JavaScript構文エラーを解消。<br>v34：地表生態系の二重進行を解消し、文明の進行を地表世界時間に同期。文明パネルから新規世界を作る操作を廃止。<br>v35：宇宙・地表の星の密度と輝度、銀河帯のコントラストを強化。<br>v36：惑星ごとに生態系を保存して再訪時に復元し、生態系の時間遅れを実際に進んだ年数で補正。<br>v37：時間倍率を最大10億倍まで拡張し、高速時間のプリセットを追加。<br>v38：惑星を移動しても文明の観察状態を同じ惑星ごとに保持。<br>v39：知能の発達を段階間で連続的に評価し、遺伝情報の観察画面を追加。</div></details>
+  <div style="margin:6px 0 10px;color:#9fb4ff;font-size:13px;font-weight:bold">アプリ バージョン：v40</div><details style="font-size:12px;margin-bottom:8px"><summary>変更履歴</summary><div>v30：生命の起源を化学反応から確率的に開始し、環境依存の生物多様化と地表滞在中の文明自動進行を追加。<br>v31：知的生命の種族名と生命起源の反応経路を地表情報に表示。<br>v32：地表時間を宇宙共通の再生・逆再生・速度操作に接続し、生態系の時間進行を連動。<br>v33：文明初期化処理に混入した改行文字を修正し、JavaScript構文エラーを解消。<br>v34：地表生態系の二重進行を解消し、文明の進行を地表世界時間に同期。文明パネルから新規世界を作る操作を廃止。<br>v35：宇宙・地表の星の密度と輝度、銀河帯のコントラストを強化。<br>v36：惑星ごとに生態系を保存して再訪時に復元し、生態系の時間遅れを実際に進んだ年数で補正。<br>v37：時間倍率を最大10億倍まで拡張し、高速時間のプリセットを追加。<br>v38：惑星を移動しても文明の観察状態を同じ惑星ごとに保持。<br>v39：知能発達指標・遺伝情報の観察画面を追加。<br>v40：文明画面に国家・集団関係の試験表示を追加。</div></details>
   <label>粒子数
     <select id="np">
       <option value="48">11万 (48³)</option>
@@ -237,7 +237,7 @@
 
 <script src="cosmology.js?v=37"></script>
 <script src="astro.js?v=35"></script>
-<script src="life.js?v=39"></script>
+<script src="life.js?v=40"></script>
 <script src="civ.js?v=38"></script>
 <script src="eco.js?v=38"></script>
 <script src="scenario.js?v=35"></script>
@@ -1167,7 +1167,7 @@ function paintCiv(force) {
   if ($('civ').style.display === 'none') return;
   const body = $('civBody');
   if (!civ) { body.innerHTML = '<div style="margin-top:6px">「新しい世界で始める」を押すと、エネルギー・材料・情報など7種類の能力をもつ技術を、個人が試行錯誤で作っていく様子を観察できます。始めるたびに別の世界になります。</div>'; return; }
-  const s = civ.summary(), caps = s.caps;
+  const s = civ.summary(), caps = s.caps;\n  const state = civ.state || {}; const nationList = state.nations || []; const relations = state.relations || []; 
   const bars = Civ.DIM_JP.map((n, i) => '<div><span>' + n + '</span><span style="background:rgba(127,166,255,.12);border-radius:3px"><i style="width:' + Math.min(100, caps[i] / 16 * 100).toFixed(1) + '%"></i></span><span style="text-align:right">' + caps[i].toFixed(1) + '</span></div>').join('');
   const ms = Civ.MILESTONES.map((m) => '<span class="' + (s.ms[m.key] !== undefined ? 'on' : '') + '" title="' + (s.ms[m.key] !== undefined ? fmtYears(s.ms[m.key]) : '未到達') + '">' + m.jp.split('(')[0] + '</span>').join('');
   const tl = civ.timeline.slice(-14).reverse().map((e) => '<div>' + fmtYears(e.year) + ' ' + e.text + '</div>').join('');
@@ -1176,7 +1176,7 @@ function paintCiv(force) {
   const progHtml = progs.length ? '<details style="margin-top:6px"><summary><b>💻 この世界で書かれたプログラム(' + progs.length + '本・実際に実行した結果)</b></summary>' + progs.map((pg) => '<div style="margin-top:6px"><b>' + pg.title + '</b> → 出力: ' + pg.out.join(', ') + '<pre>' + pg.code.map((c) => String(c.addr).padStart(2, ' ') + ' ' + c.name + (c.arg !== undefined ? ' ' + c.arg : '') + '  ; ' + c.meaning).join('\n') + '</pre></div>').join('') + '<div style="color:var(--dim)">命令の名前は、この世界の「情報」系の技術名から付いています(意味は右の説明)。</div></details>' : '';
   const indHtml = '', _unused = '<details style="margin-top:6px"><summary><b>👤 注目している個人(全体から ' + Math.min(150, Math.floor(s.pop)) + ' 人を追跡中)</b></summary>' + ind + '</details>';
   paintPerson();
-  body.innerHTML = '<div style="margin-top:6px">世界のシード <b>' + civSeedNo + '</b> ・ ' + fmtYears(s.year) + '経過 ・ 追跡中 ' + fmtPop(s.pop) + '人 ・ 技術 ' + s.items + '(作られた総数 ' + s.total + ')' + (s.ended ? ' <b style="color:#f87171">途絶えた</b>' : '') + '</div><div class="bars" style="margin-top:6px">' + bars + '</div><div class="ms">' + ms + '</div><div class="tl">' + tl + '</div>' + indHtml + progHtml;
+  body.innerHTML = '<div style="margin-top:6px">世界のシード <b>' + civSeedNo + '</b> ・ ' + fmtYears(s.year) + '経過 ・ 追跡中 ' + fmtPop(s.pop) + '人 ・ 技術 ' + s.items + '(作られた総数 ' + s.total + ')' + (s.ended ? ' <b style="color:#f87171">途絶えた</b>' : '') + '</div><div class="bars" style="margin-top:6px">' + bars + '</div><div class="ms">' + ms + '</div><div class="tl">' + tl + '</div><details style="margin-top:8px"><summary><b>🏳️ 国家・集団の関係（試験表示）</b></summary><p>この文明モデルは現在、国家・外交・領土を独立して計算していません。個人集団を国家として扱う仮表示です。</p><div>人口規模：' + fmtPop(s.pop) + '人</div><div>技術段階：' + s.items + '</div></details>' + indHtml + progHtml;
 }
 // ------------------------------------------------------------------ 自由飛行と天体
 const fkeys = {}; let cosWalk = 0;
