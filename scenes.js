@@ -964,7 +964,19 @@ function create(env) {
         env.toast('対象の惑星を再生成できませんでした。生命探索をやり直してください');
         return;
       }
-      enterPlanet(k);
+      // 恒星系画面の初期化が完了した次の描画フレームで惑星へ移動する。
+      // 同じフレーム内で enterSystem と enterPlanet を連続実行すると、
+      // 画面側の更新が恒星系で止まる環境があるため、惑星遷移を分離する。
+      requestAnimationFrame(() => {
+        if (S.kind !== 'system' || !S.sys || !S.sys.planets[k]) {
+          S.stack = ['cosmos'];
+          S.kind = 'galaxy';
+          addGalaxyLabels();
+          env.toast('惑星画面への移動に失敗しました。もう一度選択してください');
+          return;
+        }
+        enterPlanet(k);
+      });
     });
   }
   // 生命のいる惑星を探す(太陽に近い恒星を順に調べる。結果は少しずつ cb に渡す)
