@@ -1326,7 +1326,7 @@ function create(env) {
     const veg = vegOf(p), lvl = S.civNow = civLevel();
     u.set([p.tsurf || 280, greenOf(p), hasWater, sea], 40); u.set([Math.abs(sf.s0[1]), ...veg.a], 44); u.set([lvl, 0, 0, 0], 48);
     device.queue.writeBuffer(surfU, 0, u);
-    if (S.eco && env.getEcoRate) S.eco.run(env.getEcoRate() * dt);
+    // 生態系は世界時間(worldYears)側だけで進める。描画dtでの二重進行を廃止。
     buildCreatures(sf, performance.now() / 1000);
   }
 
