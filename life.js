@@ -125,13 +125,13 @@
       out.push({ kind, habitat, label, name: nm() + (kind === 3 ? (r() < 0.5 ? '樹' : '草') : kind === 2 ? '魚' : kind === 1 ? '鳥' : kind === 4 ? '人' : '獣'),
         size: base * (0.5 + r() * 1.5) * (kind === 3 ? 1 : sz), legs, plan, col, col2, speed: 0.3 + r() * 1.2, abundance: 0.4 + r() });
     } };
-    if (stage >= 5) add(2, '水中の生物', 'sea', 4 + Math.floor(r() * 5), 0.0006);
+    if (stage >= 5) add(2, '水中の生物', 'sea', 12 + Math.floor(r() * 13), 0.0006);
     if (stage >= 6) {
-      add(3, '植物', 'land', 5 + Math.floor(r() * 4), 0.004);
-      add(0, '陸上の動物', 'land', 8 + Math.floor(r() * 6), 0.0011);
-      if (atm) add(1, '空を飛ぶ動物', 'air', 3 + Math.floor(r() * 4), 0.0005);
+      add(3, '植物', 'land', 14 + Math.floor(r() * 15), 0.004);
+      add(0, '陸上の動物', 'land', 22 + Math.floor(r() * 21), 0.0011);
+      if (atm) add(1, '空を飛ぶ動物', 'air', 10 + Math.floor(r() * 11), 0.0005);
     }
-    if (bio.intelligent) add(4, '知的生命', 'land', 1, 0.0017);
+    if (bio.intelligent) add(4, '知的生命', 'land', 3 + Math.floor(r() * 4), 0.0017);
     return out;
   }
   return { starLumAt, stateAt, tidalLockGyr, environment, STATE_JP, STATE_COLOR, TEQ, biosphere, species, plantColor, STAGE_JP, cfg };
