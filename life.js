@@ -95,7 +95,11 @@
     const extinct = stage > 0 && !env.nowLiquid;
     const origin = originAge === null ? null : { age: originAge, route: ['浅い海の有機物＋雷・紫外線','海底熱水噴出孔の化学反応','鉱物表面での分子反応'][Math.floor(r()*3)], molecules: ['水','炭素化合物','窒素化合物','リン・硫黄化合物'] };
     const raceName = stage >= 9 ? ['ア','エ','オ','カ','キ','ク','サ','シ','タ','ト','ナ','ネ','ハ','ミ','ラ','リ'][Math.floor(r()*16)] + ['ル','ン','ア','イ','オ','カ','ス','ト','ム','ラ'][Math.floor(r()*10)] + ['族','人','民','種'][Math.floor(r()*4)] : null;
-    const brainAt = times[8], intellectAt = times[9];\n    const span = brainAt !== null && intellectAt !== null ? Math.max(1e-6, intellectAt - brainAt) : 1;\n    const cognitiveAge = brainAt === null ? 0 : Math.max(0, ageNow - brainAt);\n    const intelligence = brainAt === null ? 0 : Math.max(0, Math.min(1, cognitiveAge / span));\n    return { stage: extinct ? 0 : stage, peak: stage, extinct, times, origin, raceName, ageNow, intelligence, intelligent: !extinct && stage >= 9 };
+    const brainAt = times[8], intellectAt = times[9];
+    const span = brainAt !== null && intellectAt !== null ? Math.max(1e-6, intellectAt - brainAt) : 1;
+    const cognitiveAge = brainAt === null ? 0 : Math.max(0, ageNow - brainAt);
+    const intelligence = brainAt === null ? 0 : Math.max(0, Math.min(1, cognitiveAge / span));
+    return { stage: extinct ? 0 : stage, peak: stage, extinct, times, origin, raceName, ageNow, intelligence, intelligent: !extinct && stage >= 9 };
   }
   const SYL2 = ['ア', 'イ', 'ウ', 'エ', 'オ', 'カ', 'キ', 'ク', 'ケ', 'コ', 'サ', 'シ', 'ス', 'セ', 'タ', 'チ', 'テ', 'ト', 'ナ', 'ニ', 'ネ', 'ノ', 'ハ', 'ヒ', 'フ', 'ホ', 'マ', 'ミ', 'ム', 'メ', 'モ', 'ヤ', 'ユ', 'ヨ', 'ラ', 'リ', 'ル', 'ロ'];
   // 生き物(種)を手続き生成する。実在の生物の再現ではなく、惑星の条件と乱数から作る。
