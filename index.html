@@ -1060,7 +1060,8 @@ scenes = Scenes.create({
   },
   onEnter(kind) {
     lastInfo = '';
-    if (kind === 'surface' && scenes.civTarget() && (!civ || civKey !== scenes.civTarget().key)) startCivWorld();\n    $('bDNA').style.display = kind === 'surface' ? '' : 'none'; if (kind !== 'surface') $('dnaP').style.display = 'none';
+    if (kind === 'surface' && scenes.civTarget() && (!civ || civKey !== scenes.civTarget().key)) startCivWorld();
+    $('bDNA').style.display = kind === 'surface' ? '' : 'none'; if (kind !== 'surface') $('dnaP').style.display = 'none';
     $('bLand').style.display = kind === 'planet' ? '' : 'none';
     $('bLife').style.display = kind === 'cosmos' || kind === 'galaxy' ? '' : 'none';
     if (kind !== 'galaxy' && kind !== 'cosmos') $('lifeP').style.display = 'none';
@@ -1134,7 +1135,8 @@ $('bLife').onclick = async () => {
 };
 
 // ------------------------------------------------------------------ 文明の実験(civ.js)
-let civFollow = null, civ = null, civKey = null, civRunning = true, civRuns = 0, civMsSeen = 0, civSeedNo = 0, civPaint = 0, civWorldLast = 0;\n const civWorlds = new Map();
+let civFollow = null, civ = null, civKey = null, civRunning = true, civRuns = 0, civMsSeen = 0, civSeedNo = 0, civPaint = 0, civWorldLast = 0;
+ const civWorlds = new Map();
 const fmtPop = (x) => (x >= 1e8 ? (x / 1e8).toFixed(2) + '億' : x >= 1e4 ? (x / 1e4).toFixed(1) + '万' : Math.round(x).toString());
 function startCivWorld() { const t = scenes.civTarget(); if (!t) return; const old = civKey && civ ? civWorlds.set(civKey, { civ, civFollow, civSeedNo, civMsSeen }) : null; const saved = civWorlds.get(t.key); if (saved) { civ = saved.civ; civFollow = saved.civFollow; civSeedNo = saved.civSeedNo; civMsSeen = saved.civMsSeen; } else { civRuns++; civSeedNo = (Math.imul(SEED, 2654435761) ^ Math.imul(t.seed + 1, 40503) ^ civRuns * 7919) >>> 0; civ = Civ.create({ seed: civSeedNo }); civFollow = civ.pickPerson('oldest'); civMsSeen = 0; civWorlds.set(t.key, { civ, civFollow, civSeedNo, civMsSeen }); } civKey = t.key; civWorldLast = scenes.worldTime(); civRunning = true; $('civPause').textContent = '⏸'; paintCiv(true); }
 $('bCiv').onclick = () => { const v = $('civ').style.display === 'none'; $('civ').style.display = v ? '' : 'none'; if (v) { if (!civ || civKey !== (scenes.civTarget() || {}).key) startCivWorld(); paintCiv(true); } };
