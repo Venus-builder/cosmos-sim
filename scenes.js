@@ -795,7 +795,7 @@ fn globular(ro: vec3f, rd: vec3f) -> vec3f {
 // ---------------------------------------------------------------- 本体
 function create(env) {
   const { device, ctx, canvas, format, astro, cosmo } = env;
-  const S = { kind: 'cosmos', clock: 0, tCosmic: 0, gal: null, sys: null, pl: null, plIdx: -1, stack: [], labels: [] };
+  const S = { kind: 'cosmos', clock: 0, tCosmic: 0, worldYears: 0, gal: null, sys: null, pl: null, plIdx: -1, stack: [], labels: [] };
   const cams = {
     galaxy: { az: 0.4, el: 0.95, dist: 2.6, min: 0.04, max: 12 },
     system: { az: 0.3, el: 0.75, dist: 4.4, min: 0.4, max: 40 },
@@ -1426,7 +1426,8 @@ function create(env) {
     if (dir !== 0) {
       if (S.kind === 'galaxy') S.clock += dir * mult * 10 * dtReal;
       else if (S.kind === 'system') S.clock += dir * mult * 0.2 * dtReal;
-      else S.clock += dir * mult * 2 * dtReal;
+      else { S.clock += dir * mult * 2 * dtReal; S.worldYears = Math.max(0, S.worldYears + dir * mult * 2 * dtReal / 8760); }
+      if (S.kind === 'surface' && S.eco && Math.abs(S.worldYears - (S.ecoLog || 0)) >= 1) { const delta = S.worldYears - (S.ecoLog || 0); S.eco.step(Math.min(1000, Math.abs(delta)), delta < 0); S.ecoLog = S.worldYears; }
     }
     const W = canvas.clientWidth, H = canvas.clientHeight;
     const enc = device.createCommandEncoder();
@@ -1469,7 +1470,7 @@ function create(env) {
   return {
     get kind() { return S.kind; }, active, curCam, enterGalaxy, enterSun, back, onTap, frame, speedText,
     canBack: () => S.stack.length > 0, enterPlanet, labelsRef: () => S.labels,
-    getSystem: () => S.sys, planetIndex: () => S.plIdx, eco: () => S.eco, ecoEvent: (k) => { if (S.eco) S.eco.event(k, 0.6 + 0.3 * Math.random()); }, setFly, flying: () => { const c = cams[S.kind]; return !!(c && c.fly); }, viewObject, nearby: () => S.near || [], follow: (k) => { S.follow = (S.follow === k ? null : k); }, following: () => S.follow, scanLife, flyTo, land: () => land(null), setWalk: (v) => { S.walk = v; },
+    getSystem: () => S.sys, planetIndex: () => S.plIdx, eco: () => S.eco, worldTime: () => S.worldYears, ecoEvent: (k) => { if (S.eco) S.eco.event(k, 0.6 + 0.3 * Math.random()); }, setFly, flying: () => { const c = cams[S.kind]; return !!(c && c.fly); }, viewObject, nearby: () => S.near || [], follow: (k) => { S.follow = (S.follow === k ? null : k); }, following: () => S.follow, scanLife, flyTo, land: () => land(null), setWalk: (v) => { S.walk = v; },
     dbg: () => ({ crCount, fauna: (S.fauna||[]).map((x) => x.kind + ':' + x.size.toFixed(4)).join(' '), h: terrainH(S.sf.s0, S.pl.seed || 1), sea: 0.3 + 0.4 * (S.pl.water || 0), seed: S.pl.seed, kind: S.pl.kind, s0: S.sf.s0 }),
     civTarget: () => (S.pl && S.pl.bio && S.pl.bio.intelligent && S.sys ? { key: S.sys.seed + ':' + S.pl.name, name: S.pl.name, real: !!S.pl.bio.real, seed: Math.floor((S.pl.seed || 1) * 1000) } : null),
     cosmosReturn: () => { S.kind = 'cosmos'; S.stack = []; clearLabels(); },
