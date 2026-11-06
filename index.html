@@ -57,7 +57,7 @@
   .lbl { }
   #bUI { position: fixed; right: 8px; top: 50%; z-index: 30; width: 38px; height: 38px; padding: 0; border-radius: 50%; opacity: .55; font-size: 18px; }
   #bUI:hover { opacity: 1; }
-  body.hideui #info, body.hideui #opts, body.hideui #bar, body.hideui #civ, body.hideui #lifeP, body.hideui #nearP, body.hideui #objP, body.hideui #ecoP, body.hideui #scnP, body.hideui #markers { display: none !important; }
+  body.hideui #info, body.hideui #opts, body.hideui #bar, body.hideui #civ, body.hideui #lifeP, body.hideui #dnaP, body.hideui #nearP, body.hideui #objP, body.hideui #ecoP, body.hideui #scnP, body.hideui #markers { display: none !important; }
   #ecoP { right: 16px; top: 64px; width: 340px; max-height: calc(100dvh - 300px); overflow-y: auto; font-size: 12px; line-height: 1.5; }
   #ecoP .tr div { white-space: nowrap; }
   #ecoP .lg { max-height: 120px; overflow-y: auto; margin-top: 4px; border-top: 1px solid var(--line); padding-top: 4px; }
@@ -132,7 +132,7 @@
 
 <details id="opts" class="panel" open>
   <summary>設定</summary>
-  <div style="margin:6px 0 10px;color:#9fb4ff;font-size:13px;font-weight:bold">アプリ バージョン：v38</div><details style="font-size:12px;margin-bottom:8px"><summary>変更履歴</summary><div>v30：生命の起源を化学反応から確率的に開始し、環境依存の生物多様化と地表滞在中の文明自動進行を追加。<br>v31：知的生命の種族名と生命起源の反応経路を地表情報に表示。<br>v32：地表時間を宇宙共通の再生・逆再生・速度操作に接続し、生態系の時間進行を連動。<br>v33：文明初期化処理に混入した改行文字を修正し、JavaScript構文エラーを解消。<br>v34：地表生態系の二重進行を解消し、文明の進行を地表世界時間に同期。文明パネルから新規世界を作る操作を廃止。<br>v35：宇宙・地表の星の密度と輝度、銀河帯のコントラストを強化。<br>v36：惑星ごとに生態系を保存して再訪時に復元し、生態系の時間遅れを実際に進んだ年数で補正。<br>v37：時間倍率を最大10億倍まで拡張し、高速時間のプリセットを追加。<br>v38：惑星を移動しても文明の観察状態を同じ惑星ごとに保持し、戻った際に文明が新規化される問題を修正。</div></details>
+  <div style="margin:6px 0 10px;color:#9fb4ff;font-size:13px;font-weight:bold">アプリ バージョン：v39</div><details style="font-size:12px;margin-bottom:8px"><summary>変更履歴</summary><div>v30：生命の起源を化学反応から確率的に開始し、環境依存の生物多様化と地表滞在中の文明自動進行を追加。<br>v31：知的生命の種族名と生命起源の反応経路を地表情報に表示。<br>v32：地表時間を宇宙共通の再生・逆再生・速度操作に接続し、生態系の時間進行を連動。<br>v33：文明初期化処理に混入した改行文字を修正し、JavaScript構文エラーを解消。<br>v34：地表生態系の二重進行を解消し、文明の進行を地表世界時間に同期。文明パネルから新規世界を作る操作を廃止。<br>v35：宇宙・地表の星の密度と輝度、銀河帯のコントラストを強化。<br>v36：惑星ごとに生態系を保存して再訪時に復元し、生態系の時間遅れを実際に進んだ年数で補正。<br>v37：時間倍率を最大10億倍まで拡張し、高速時間のプリセットを追加。<br>v38：惑星を移動しても文明の観察状態を同じ惑星ごとに保持。<br>v39：知能の発達を段階間で連続的に評価し、遺伝情報の観察画面を追加。</div></details>
   <label>粒子数
     <select id="np">
       <option value="48">11万 (48³)</option>
@@ -165,7 +165,7 @@
     <button id="bLand" title="この惑星の地表に降りる" style="display:none">⬇<span class="lbl"> 着陸</span></button>
     <button id="bCiv" title="文明の実験" style="display:none">🏛<span class="lbl"> 文明</span></button>
     <button id="bNear" title="近くの生き物を一匹ずつ見る" style="display:none">🐾<span class="lbl"> 生き物</span></button>
-    <button id="bEco" title="生態系(進化・絶滅)" style="display:none">🧬<span class="lbl"> 生態系</span></button>
+    <button id="bEco" title="生態系(進化・絶滅)" style="display:none">🧬<span class="lbl"> 生態系</span></button>\n    <button id="bDNA" title="遺伝情報・進化系統" style="display:none">🧬<span class="lbl"> 遺伝情報</span></button>
     <button id="bScn" title="いまの地球からのシナリオ" style="display:none">🌍<span class="lbl"> 地球</span></button>
     <button id="bObj" title="いろいろな天体(ブラックホールなど)">🌌<span class="lbl"> 天体</span></button>
     <button id="bFly" title="自由飛行(宇宙・銀河・恒星系)">🚀<span class="lbl"> 飛行</span></button>
@@ -226,7 +226,7 @@
   <div style="color:var(--dim);font-size:11px">押すと、その個体のほうを向いて追います。状態(体力・行動)は個体の番号と時刻から決まる仮の値です。</div>
   <div id="nearBody"></div>
 </div>
-<div id="lifeP" class="panel" style="display:none">
+<div id="dnaP" class="panel" style="display:none;right:16px;top:64px;width:330px;max-height:calc(100dvh - 300px);overflow:auto;font-size:12px;line-height:1.6"><div class="row" style="justify-content:space-between"><b>🧬 遺伝情報・進化系統</b><button class="small" id="dnaX">✕</button></div><div id="dnaBody"></div></div>\n<div id="lifeP" class="panel" style="display:none">
   <div class="row" style="justify-content:space-between"><b>🌱 生命のいる惑星</b><button class="small" id="lifeX">✕</button></div>
   <div id="lifeBody" style="color:var(--dim)"></div>
 </div>
@@ -237,7 +237,7 @@
 
 <script src="cosmology.js?v=37"></script>
 <script src="astro.js?v=35"></script>
-<script src="life.js?v=38"></script>
+<script src="life.js?v=39"></script>
 <script src="civ.js?v=38"></script>
 <script src="eco.js?v=38"></script>
 <script src="scenario.js?v=35"></script>
@@ -1017,7 +1017,7 @@ scenes = Scenes.create({
   },
   onEnter(kind) {
     lastInfo = '';
-    if (kind === 'surface' && scenes.civTarget() && (!civ || civKey !== scenes.civTarget().key)) startCivWorld();
+    if (kind === 'surface' && scenes.civTarget() && (!civ || civKey !== scenes.civTarget().key)) startCivWorld();\n    $('bDNA').style.display = kind === 'surface' ? '' : 'none'; if (kind !== 'surface') $('dnaP').style.display = 'none';
     $('bLand').style.display = kind === 'planet' ? '' : 'none';
     $('bLife').style.display = kind === 'cosmos' || kind === 'galaxy' ? '' : 'none';
     if (kind !== 'galaxy' && kind !== 'cosmos') $('lifeP').style.display = 'none';
@@ -1040,7 +1040,7 @@ $('bLand').onclick = () => scenes.land();
   w.addEventListener('pointerdown', on(1)); w.addEventListener('pointerup', on(0)); w.addEventListener('pointerleave', on(0)); w.addEventListener('pointercancel', on(0));
 }
 // ------------------------------------------------------------------ 生命のいる惑星へ飛ぶ
-$('lifeX').onclick = () => { $('lifeP').style.display = 'none'; };
+$('lifeX').onclick = () => { $('lifeP').style.display = 'none'; };\n$('dnaX').onclick = () => { $('dnaP').style.display = 'none'; };\n$('bDNA').onclick = () => { const p=scenes.getPlanet && scenes.getPlanet(); const body=$('dnaBody'); $('dnaP').style.display=''; const seed=Math.floor((p&&p.seed||1)*1e6)>>>0; const hash=(n)=>{let x=(seed^Math.imul(n+1,0x45d9f3b))>>>0;x=Math.imul(x^(x>>>16),0x45d9f3b);return (x^(x>>>16))>>>0;}; const bio=p&&p.bio||{}; const score=Math.round((bio.intelligence||0)*100); body.innerHTML='<p>これは惑星シードから生成した<strong>仮想遺伝マーカー</strong>です。実在のDNA配列ではありません。</p><p>系統識別子：'+seed.toString(16).toUpperCase()+'</p><p>遺伝マーカー：'+Array.from({length:12},(_,i)=>['A','T','G','C'][hash(i)%4]).join('')+'</p><p>変異傾向：'+(hash(20)%1000)/1000+'</p><p>環境適応指標：'+(hash(21)%1000)/1000+'</p><p>知能発達度（仮説指標）：'+score+'%</p><p>生命段階：'+(Life.STAGE_JP[bio.stage]||'未確認')+'</p><p>※生物の実際の遺伝子・進化履歴を計算している段階ではなく、観察用の暫定表示です。</p>'; };
 function paintLife(list, done, scanned) {
   const el = $('lifeBody'); $('lifeP').style.display = '';
   el.innerHTML = '';
