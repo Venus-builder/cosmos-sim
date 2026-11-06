@@ -900,9 +900,12 @@ function create(env) {
       S.gpts.push(o); S.objLab.push(S.labels.length);
       S.labels.push(addLabel(astro.OBJ_TYPES[o.type].icon + ' ' + astro.OBJ_TYPES[o.type].jp.split('(')[0], () => fade(() => enterObject(astro.makeObject(o.type, o.seed, o.hint), 'galaxy')), 'obj'));
     }
-    for (const i of picks) {
-      const m = g.sts.mass[i], sp = astro.starFromMass(m, Math.max(0.1, g.tNow - g.sts.birth[i])).spec;
-      S.gpts.push(i); S.labels.push(addLabel('☆ ' + sp + '型 ' + m.toFixed(1) + 'M☉', () => fade(() => enterStarSystem(i))));
+    // 生命のいる惑星を表示している間は、通常の恒星一覧を隠してラベルの重なりを防ぐ
+    if (!(S.gfound && S.gfound.length)) {
+      for (const i of picks) {
+        const m = g.sts.mass[i], sp = astro.starFromMass(m, Math.max(0.1, g.tNow - g.sts.birth[i])).spec;
+        S.gpts.push(i); S.labels.push(addLabel('☆ ' + sp + '型 ' + m.toFixed(1) + 'M☉', () => fade(() => enterStarSystem(i))));
+      }
     }
   }
   function objPos(o, tMyr) {
@@ -938,7 +941,23 @@ function create(env) {
     const g = S.gal, r = g.A[i * 4], birth = g.sts.birth[i];
     return { seed: astro.hashSeed(g.seed, i), mass: g.sts.mass[i], Z: astro.metallicity(g, birth, r), age: g.tNow - birth, name: '恒星 #' + i };
   }
-  function flyTo(i, k) { if (S.kind !== 'galaxy') return; clearLabels(); fade(() => { enterStarSystem(i); enterPlanet(k); }); }
+  function flyTo(i, k) {
+    if (S.kind !== 'galaxy') return;
+    const g = S.gal;
+    if (!g || !Number.isInteger(i) || i < 0 || i >= g.n || !Number.isInteger(k) || k < 0) {
+      env.toast('生命のいる惑星データが不正です。もう一度生命探索してください'); return;
+    }
+    clearLabels();
+    fade(() => {
+      // 生命一覧の恒星番号から恒星系を再生成し、惑星番号を確認してから遷移
+      enterStarSystem(i);
+      if (!S.sys || k >= S.sys.planets.length) {
+        S.stack = ['cosmos']; S.kind = 'galaxy'; addGalaxyLabels();
+        env.toast('対象の惑星が見つかりませんでした'); return;
+      }
+      enterPlanet(k);
+    });
+  }
   // 生命のいる惑星を探す(太陽に近い恒星を順に調べる。結果は少しずつ cb に渡す)
   function scanLife(cb) {
     if (S.kind !== 'galaxy') return false;
