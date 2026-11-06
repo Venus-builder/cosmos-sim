@@ -132,7 +132,7 @@
 
 <details id="opts" class="panel" open>
   <summary>設定</summary>
-  <div style="margin:6px 0 10px;color:#9fb4ff;font-size:13px;font-weight:bold">アプリ バージョン：v29</div><details style="font-size:12px;margin-bottom:8px"><summary>変更履歴</summary><div>v29：生成される異星生物の種数を増加（水中・陸上・植物・飛翔生物・知的生命）。</div></details>
+  <div style="margin:6px 0 10px;color:#9fb4ff;font-size:13px;font-weight:bold">アプリ バージョン：v30</div><details style="font-size:12px;margin-bottom:8px"><summary>変更履歴</summary><div>v30：生命の起源を化学反応から確率的に開始し、環境依存の生物多様化と地表滞在中の文明自動進行を追加。</div></details>
   <label>粒子数
     <select id="np">
       <option value="48">11万 (48³)</option>
@@ -231,13 +231,13 @@
 <div id="toast"></div>
 <div id="fatal"><div id="fatalMsg"></div></div>
 
-<script src="cosmology.js?v=26"></script>
-<script src="astro.js?v=26"></script>
-<script src="life.js?v=26"></script>
-<script src="civ.js?v=26"></script>
-<script src="eco.js?v=26"></script>
-<script src="scenario.js?v=26"></script>
-<script src="scenes.js?v=28"></script>
+<script src="cosmology.js?v=30"></script>
+<script src="astro.js?v=30"></script>
+<script src="life.js?v=30"></script>
+<script src="civ.js?v=30"></script>
+<script src="eco.js?v=30"></script>
+<script src="scenario.js?v=30"></script>
+<script src="scenes.js?v=30"></script>
 <script>
 (async function () {
 'use strict';
@@ -1013,6 +1013,7 @@ scenes = Scenes.create({
   },
   onEnter(kind) {
     lastInfo = '';
+    if (kind === 'surface' && scenes.civTarget() && (!civ || civKey !== scenes.civTarget().key)) startCivWorld();
     $('bLand').style.display = kind === 'planet' ? '' : 'none';
     $('bLife').style.display = kind === 'cosmos' || kind === 'galaxy' ? '' : 'none';
     if (kind !== 'galaxy' && kind !== 'cosmos') $('lifeP').style.display = 'none';
@@ -1063,7 +1064,7 @@ $('bLife').onclick = async () => {
 // ------------------------------------------------------------------ 文明の実験(civ.js)
 let civFollow = null, civ = null, civKey = null, civRunning = true, civRuns = 0, civMsSeen = 0, civSeedNo = 0, civPaint = 0;
 const fmtPop = (x) => (x >= 1e8 ? (x / 1e8).toFixed(2) + '億' : x >= 1e4 ? (x / 1e4).toFixed(1) + '万' : Math.round(x).toString());
-$('bCiv').onclick = () => { const v = $('civ').style.display === 'none'; $('civ').style.display = v ? '' : 'none'; if (v) paintCiv(true); };
+function startCivWorld() { const t = scenes.civTarget(); if (!t) return; civRuns++; civSeedNo = (Math.imul(SEED, 2654435761) ^ Math.imul(t.seed + 1, 40503) ^ civRuns * 7919) >>> 0; civ = Civ.create({ seed: civSeedNo }); civFollow = civ.pickPerson('oldest'); civKey = t.key; civMsSeen = 0; civRunning = true; $('civPause').textContent = '⏸'; paintCiv(true); }\n$('bCiv').onclick = () => { const v = $('civ').style.display === 'none'; $('civ').style.display = v ? '' : 'none'; if (v) { if (!civ || civKey !== (scenes.civTarget() || {}).key) startCivWorld(); paintCiv(true); } };
 // ------------------------------------------------------------------ 生態系パネル
 $('ecoX').onclick = () => { $('ecoP').style.display = 'none'; };
 $('bEco').onclick = () => { const v = $('ecoP').style.display === 'none'; $('ecoP').style.display = v ? '' : 'none'; if (v) $('scnP').style.display = 'none'; };
@@ -1147,12 +1148,7 @@ function paintPerson() {
     + '<div class="tl" style="max-height:140px">' + p.log.slice().reverse().map((l) => '<div>' + fmtYears(l.year) + ' ' + l.text + '</div>').join('') + '</div>';
 }
 $('civPause').onclick = () => { civRunning = !civRunning; $('civPause').textContent = civRunning ? '⏸' : '▶'; };
-$('civGo').onclick = () => {
-  const t = scenes.civTarget(); if (!t) return;
-  civRuns++; civSeedNo = (Math.imul(SEED, 2654435761) ^ Math.imul(t.seed + 1, 40503) ^ civRuns * 7919) >>> 0;
-  civ = Civ.create({ seed: civSeedNo }); civFollow = civ.pickPerson('oldest'); civKey = t.key; civMsSeen = 0; civRunning = true; $('civPause').textContent = '⏸';
-  logVisit('文明の実験 #' + civSeedNo + '(' + t.name + ')'); paintCiv(true);
-};
+$('civGo').onclick = () => { startCivWorld(); const t = scenes.civTarget(); if (t) logVisit('文明の実験 #' + civSeedNo + '(' + t.name + ')'); };
 function civTick(dt) {
   if (!civ || !civRunning || civ.ended) return;
   let left = Number($('civSpeed').value) * dt; const t0 = performance.now();
