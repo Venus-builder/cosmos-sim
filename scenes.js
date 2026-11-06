@@ -795,7 +795,7 @@ fn globular(ro: vec3f, rd: vec3f) -> vec3f {
 // ---------------------------------------------------------------- 本体
 function create(env) {
   const { device, ctx, canvas, format, astro, cosmo } = env;
-  const S = { kind: 'cosmos', clock: 0, tCosmic: 0, worldYears: 0, gal: null, sys: null, pl: null, plIdx: -1, stack: [], labels: [] };
+  const S = { kind: 'cosmos', clock: 0, tCosmic: 0, worldYears: 0, gal: null, sys: null, pl: null, plIdx: -1, stack: [], labels: [], ecoWorlds: new Map() };
   const cams = {
     galaxy: { az: 0.4, el: 0.95, dist: 2.6, min: 0.04, max: 12 },
     system: { az: 0.3, el: 0.75, dist: 4.4, min: 0.4, max: 40 },
@@ -1197,8 +1197,15 @@ function create(env) {
     S.sf = { s0, Eb: b.E, Nb: b.N, wx: 0, wz: 0, sel: 0, lat: b.lat, lon: b.lon, hd: 0 };
     Object.assign(cams.surface, { az: 0, el: 0.12, dist: 1 });
     clearLabels(); env.onEnter('surface');
-    S.fauna = p.bio && p.bio.stage >= 5 ? env.life.species(p, S.sys.star, p.bio, (p.seed || 1) + 0.5) : [];
-    makeEco(p, S.sf);
+    // 惑星ごとの生態系を保存し、再訪時に同じ個体群・進化履歴を復元する
+    S.ecoKey = String(S.sys.seed || 0) + ':' + String(p.seed || 0) + ':' + p.name;
+    const savedEco = S.ecoWorlds.get(S.ecoKey);
+    if (savedEco) { S.fauna = savedEco.fauna; S.eco = savedEco.eco; S.ecoLog = savedEco.ecoLog; }
+    else {
+      S.fauna = p.bio && p.bio.stage >= 5 ? env.life.species(p, S.sys.star, p.bio, (p.seed || 1) + 0.5) : [];
+      makeEco(p, S.sf);
+      if (S.eco) S.ecoWorlds.set(S.ecoKey, { fauna: S.fauna, eco: S.eco, ecoLog: S.ecoLog });
+    }
     env.toast(p.name === '地球' ? '地球の地表です(生き物は手続き生成の姿で、実在の種そのものではありません)' : '地表に降り立ちました: ' + bioText(p), 5200);
   }
   // ---- 生き物と建物(地表のセルごとに、シードから決まる配置)
@@ -1293,7 +1300,8 @@ function create(env) {
     const blocked = (x, z) => mask[Math.min(M - 1, Math.floor(x / Lr * M)) + Math.min(M - 1, Math.floor(z / Lr * M)) * M] === 1;
     const species = animals.map((x) => ({ kind: x.kind, name: x.name, plan: x.plan || 0, legs: x.legs, col: x.col, col2: x.col2, speed: x.speed, size: x.size }));
     S.eco = env.eco.create({ seed: Math.floor(seed * 1000) ^ astro.hashSeed(Math.floor(sf.s0[0] * 1e4), Math.floor(sf.s0[2] * 1e4)), species, blocked, cover: p.kind === 'desert' ? 0.45 : 0.85 });
-    S.ecoLog = 0;
+    // 生態系の初期化時点を世界時計に合わせる。過去の時間を初期個体へ一括適用しない
+    S.ecoLog = S.worldYears;
   }
   function surfaceFrame(dt, W, H) {
     const p = S.pl, sf = S.sf, cam = cams.surface, R = p.radiusE * 6371;
@@ -1427,7 +1435,14 @@ function create(env) {
       if (S.kind === 'galaxy') S.clock += dir * mult * 10 * dtReal;
       else if (S.kind === 'system') S.clock += dir * mult * 0.2 * dtReal;
       else { S.clock += dir * mult * 2 * dtReal; S.worldYears = Math.max(0, S.worldYears + dir * mult * 2 * dtReal / 8760); }
-      if (S.kind === 'surface' && S.eco && Math.abs(S.worldYears - (S.ecoLog || 0)) >= 1) { const delta = S.worldYears - (S.ecoLog || 0); if (delta > 0) S.eco.run(Math.min(1000, delta)); S.ecoLog = S.worldYears; }
+      if (S.kind === 'surface' && S.eco && S.worldYears > (S.ecoLog || 0)) {
+        const delta = S.worldYears - (S.ecoLog || 0);
+        // 生態系側の実処理上限(約4ms)に合わせ、進んだ分だけ世界時計との差を埋める
+        const advanced = S.eco.run(Math.min(1000, delta));
+        S.ecoLog = (S.ecoLog || 0) + Math.max(0, advanced);
+        const saved = S.ecoWorlds.get(S.ecoKey);
+        if (saved) saved.ecoLog = S.ecoLog;
+      }
     }
     const W = canvas.clientWidth, H = canvas.clientHeight;
     const enc = device.createCommandEncoder();
