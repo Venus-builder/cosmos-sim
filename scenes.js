@@ -1249,7 +1249,8 @@ function create(env) {
         const wall = [[0.62, 0.5, 0.36], [0.72, 0.68, 0.6], [0.55, 0.58, 0.62], [0.7, 0.74, 0.78]], roof = [[0.42, 0.3, 0.16], [0.55, 0.25, 0.2], [0.3, 0.3, 0.32], [0.3, 0.35, 0.4]];
         const town = smoothstep01(0.5, 0.62, noise3js((ci + 0.5) * cell * 0.8, (cj + 0.5) * cell * 0.8, 11)), core = smoothstep01(0.6, 0.7, noise3js((ci + 0.5) * cell * 0.8, (cj + 0.5) * cell * 0.8, 11));
         const tryT = (lv, prob, size, wr, k) => { if (lvl >= lv + 1 && r(k) < prob && Math.hypot(X(k + 1) - sf.wx, Z(k + 1) - sf.wz) > 0.06) add(5, X(k + 1), Z(k + 1), size * (0.8 + 0.4 * r(k + 2)), null, lv, 0, 0, 0, 0, wr, wall[lv], roof[lv]); };
-        if (lvl >= 1) { tryT(0, 0.10 * town, 0.0038, 1.0, 60); tryT(0, 0.035 * town, 0.0055, 1.15, 63); }\n        if (lvl >= 2) { tryT(1, 0.24 * town, 0.008, 1.2, 64); tryT(0, 0.10 * town, 0.0045, 1.0, 65); }
+        if (lvl >= 1) { tryT(0, 0.10 * town, 0.0038, 1.0, 60); tryT(0, 0.035 * town, 0.0055, 1.15, 63); }
+        if (lvl >= 2) { tryT(1, 0.24 * town, 0.008, 1.2, 64); tryT(0, 0.10 * town, 0.0045, 1.0, 65); }
         if (lvl >= 3) tryT(2, 0.07 * core, 0.035, 0.5, 66);
         if (lvl >= 4) tryT(3, 0.06 * core, 0.07, 0.6, 69);
         const tryS = (lv, prob, size, wr, k) => { if (lvl >= lv + 1 && r(k) < prob && Math.hypot(X(k + 1) - sf.wx, Z(k + 1) - sf.wz) > 0.06) add(5, X(k + 1), Z(k + 1), size * (0.8 + 0.4 * r(k + 2)), null, lv, 0, 0, 0, 0, wr, wall[lv], roof[lv]); };
