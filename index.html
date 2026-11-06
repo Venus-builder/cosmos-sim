@@ -1122,16 +1122,28 @@ function paintLife(list, done, scanned) {
     el.appendChild(b);
   });
 }
+let lifeSearchBusy = false;
 $('bLife').onclick = async () => {
-  if (scenes.kind === 'galaxy') { paintLife([], false, 0); scenes.scanLife(paintLife); return; }
+  if (lifeSearchBusy) return;
+  if (scenes.kind === 'galaxy') {
+    lifeSearchBusy = true; $('bLife').disabled = true;
+    try { paintLife([], false, 0); const ok = scenes.scanLife(paintLife); if (!ok) toast('この画面では生命探索を開始できません'); }
+    catch (e) { console.error('生命探索エラー', e); toast('生命探索に失敗しました。開発ログを確認してください', 5000); }
+    finally { lifeSearchBusy = false; $('bLife').disabled = false; }
+    return;
+  }
   if (st.t < 9) { st.seek = cosmo.tNow; setDir(0); toast('宇宙が若すぎます。現在へ移動します。着いたらもう一度 🌱 を押してください', 5000); return; }
+  lifeSearchBusy = true; $('bLife').disabled = true;
   toast('生命のいる銀河を探しています…', 2500);
-  const halos = await findHalos(), tNow = st.t;
-  const spiralHalos = halos.filter((h) => Astro.galaxyType(h.Mh) === 'spiral');
-  const sp = spiralHalos[Math.floor(Math.random() * spiralHalos.length)] || halos[Math.floor(Math.random() * halos.length)];
-  if (!sp) return;
-  clearHaloMarks();
-  enterScene(() => { scenes.enterGalaxy({ Mh: sp.Mh, rho: sp.rho, seed: sp.seed, tNow }); setTimeout(() => { paintLife([], false, 0); scenes.scanLife(paintLife); }, 300); });
+  try {
+    const halos = await findHalos(), tNow = st.t;
+    if (!halos.length) { toast('銀河候補が見つかりませんでした。時間を進めて再試行してください', 5000); return; }
+    const spiralHalos = halos.filter((h) => Astro.galaxyType(h.Mh) === 'spiral');
+    const sp = spiralHalos[Math.floor(Math.random() * spiralHalos.length)] || halos[Math.floor(Math.random() * halos.length)];
+    clearHaloMarks();
+    enterScene(() => { scenes.enterGalaxy({ Mh: sp.Mh, rho: sp.rho, seed: sp.seed, tNow }); setTimeout(() => { paintLife([], false, 0); scenes.scanLife(paintLife); }, 300); });
+  } catch (e) { console.error('生命探索エラー', e); toast('生命探索に失敗しました。開発ログを確認してください', 5000); }
+  finally { lifeSearchBusy = false; $('bLife').disabled = false; }
 };
 
 // ------------------------------------------------------------------ 文明の実験(civ.js)
