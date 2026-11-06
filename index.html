@@ -132,7 +132,7 @@
 
 <details id="opts" class="panel" open>
   <summary>設定</summary>
-  <div style="margin:6px 0 10px;color:#9fb4ff;font-size:13px;font-weight:bold">アプリ バージョン：v43</div><details style="font-size:12px;margin-bottom:8px"><summary>変更履歴</summary><div>v30：生命の起源を化学反応から確率的に開始し、環境依存の生物多様化と地表滞在中の文明自動進行を追加。<br>v31：知的生命の種族名と生命起源の反応経路を地表情報に表示。<br>v32：地表時間を宇宙共通の再生・逆再生・速度操作に接続し、生態系の時間進行を連動。<br>v33：文明初期化処理に混入した改行文字を修正し、JavaScript構文エラーを解消。<br>v34：地表生態系の二重進行を解消し、文明の進行を地表世界時間に同期。文明パネルから新規世界を作る操作を廃止。<br>v35：宇宙・地表の星の密度と輝度、銀河帯のコントラストを強化。<br>v36：惑星ごとに生態系を保存して再訪時に復元し、生態系の時間遅れを実際に進んだ年数で補正。<br>v37：時間倍率を最大10億倍まで拡張し、高速時間のプリセットを追加。<br>v38：惑星を移動しても文明の観察状態を同じ惑星ごとに保持。<br>v39：知能発達指標・遺伝情報の観察画面を追加。<br>v40：文明画面に国家・集団関係の試験表示を追加。<br>v41：国家段階の成立状況と社会組織能力を文明観察欄に表示。<br>v42：追加コードに混入した不正な改行表記を修正し、JavaScript構文と画面表示を正常化。<br>v43：遺伝情報画面を拡充し、32文字の仮想塩基列・複数形質指標・知能段階の一覧を惑星ごとに表示。</div></details>
+  <div style="margin:6px 0 10px;color:#9fb4ff;font-size:13px;font-weight:bold">アプリ バージョン：v44</div><details style="font-size:12px;margin-bottom:8px"><summary>変更履歴</summary><div>v30：生命の起源を化学反応から確率的に開始し、環境依存の生物多様化と地表滞在中の文明自動進行を追加。<br>v31：知的生命の種族名と生命起源の反応経路を地表情報に表示。<br>v32：地表時間を宇宙共通の再生・逆再生・速度操作に接続し、生態系の時間進行を連動。<br>v33：文明初期化処理に混入した改行文字を修正し、JavaScript構文エラーを解消。<br>v34：地表生態系の二重進行を解消し、文明の進行を地表世界時間に同期。文明パネルから新規世界を作る操作を廃止。<br>v35：宇宙・地表の星の密度と輝度、銀河帯のコントラストを強化。<br>v36：惑星ごとに生態系を保存して再訪時に復元し、生態系の時間遅れを実際に進んだ年数で補正。<br>v37：時間倍率を最大10億倍まで拡張し、高速時間のプリセットを追加。<br>v38：惑星を移動しても文明の観察状態を同じ惑星ごとに保持。<br>v39：知能発達指標・遺伝情報の観察画面を追加。<br>v40：文明画面に国家・集団関係の試験表示を追加。<br>v41：国家段階の成立状況と社会組織能力を文明観察欄に表示。<br>v42：追加コードに混入した不正な改行表記を修正し、JavaScript構文と画面表示を正常化。<br>v43：遺伝情報画面を拡充し、32文字の仮想塩基列・複数形質指標・知能段階の一覧を惑星ごとに表示。<br>v44：文明パネルを人口・社会組織能力・到達済み社会技術の観察表示に変更。外交・国境など未実装機能を実在表示のように扱わないよう明記。</div></details>
   <label>粒子数
     <select id="np">
       <option value="48">11万 (48³)</option>
@@ -237,13 +237,13 @@
 <div id="toast"></div>
 <div id="fatal"><div id="fatalMsg"></div></div>
 
-<script src="cosmology.js?v=43"></script>
-<script src="astro.js?v=43"></script>
-<script src="life.js?v=43"></script>
-<script src="civ.js?v=43"></script>
-<script src="eco.js?v=43"></script>
-<script src="scenario.js?v=43"></script>
-<script src="scenes.js?v=43"></script>
+<script src="cosmology.js?v=44"></script>
+<script src="astro.js?v=44"></script>
+<script src="life.js?v=44"></script>
+<script src="civ.js?v=44"></script>
+<script src="eco.js?v=44"></script>
+<script src="scenario.js?v=44"></script>
+<script src="scenes.js?v=44"></script>
 <script>
 (async function () {
 'use strict';
@@ -1204,7 +1204,7 @@ function paintCiv(force) {
   const progHtml = progs.length ? '<details style="margin-top:6px"><summary><b>💻 この世界で書かれたプログラム(' + progs.length + '本・実際に実行した結果)</b></summary>' + progs.map((pg) => '<div style="margin-top:6px"><b>' + pg.title + '</b> → 出力: ' + pg.out.join(', ') + '<pre>' + pg.code.map((c) => String(c.addr).padStart(2, ' ') + ' ' + c.name + (c.arg !== undefined ? ' ' + c.arg : '') + '  ; ' + c.meaning).join('\n') + '</pre></div>').join('') + '<div style="color:var(--dim)">命令の名前は、この世界の「情報」系の技術名から付いています(意味は右の説明)。</div></details>' : '';
   const indHtml = '', _unused = '<details style="margin-top:6px"><summary><b>👤 注目している個人(全体から ' + Math.min(150, Math.floor(s.pop)) + ' 人を追跡中)</b></summary>' + ind + '</details>';
   paintPerson();
-  body.innerHTML = '<div style="margin-top:6px">世界のシード <b>' + civSeedNo + '</b> ・ ' + fmtYears(s.year) + '経過 ・ 追跡中 ' + fmtPop(s.pop) + '人 ・ 技術 ' + s.items + '(作られた総数 ' + s.total + ')' + (s.ended ? ' <b style="color:#f87171">途絶えた</b>' : '') + '</div><div class="bars" style="margin-top:6px">' + bars + '</div><div class="ms">' + ms + '</div><div class="tl">' + tl + '</div><details style="margin-top:8px"><summary><b>🏳️ 国家・集団の関係（試験表示）</b></summary><p>この文明モデルは現在、国家・外交・領土を独立して計算していません。個人集団を国家として扱う仮表示です。</p><div>人口規模：' + fmtPop(s.pop) + '人</div><div>技術段階：' + s.items + '</div></details>' + indHtml + progHtml;
+  body.innerHTML = '<div style="margin-top:6px">世界のシード <b>' + civSeedNo + '</b> ・ ' + fmtYears(s.year) + '経過 ・ 追跡中 ' + fmtPop(s.pop) + '人 ・ 技術 ' + s.items + '(作られた総数 ' + s.total + ')' + (s.ended ? ' <b style="color:#f87171">途絶えた</b>' : '') + '</div><div class="bars" style="margin-top:6px">' + bars + '</div><div class="ms">' + ms + '</div><div class="tl">' + tl + '</div><details style="margin-top:8px"><summary><b>🏛 社会・国家形成の観察</b></summary><p>国家形成の前提となる社会組織能力と人口・技術の到達点です（外交・国境・戦争は未モデル化）。</p><div>社会組織能力：'+caps[6].toFixed(2)+'</div><div>人口：'+fmtPop(s.pop)+'</div><div>社会段階：'+(s.ms.city!==undefined?'都市・大規模組織':s.ms.agri!==undefined?'定住・農耕':'小集団・移動生活')+'</div><div>到達済み：</div><ul style="padding-left:18px">'+Civ.MILESTONES.filter(m=>s.ms[m.key]!==undefined).map(m=>'<li>'+m.jp.split('(')[0]+'（'+fmtYears(s.ms[m.key])+'）</li>').join('')+'</ul></details>' + indHtml + progHtml;
 }
 // ------------------------------------------------------------------ 自由飛行と天体
 const fkeys = {}; let cosWalk = 0;
