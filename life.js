@@ -70,8 +70,9 @@
 
   // ------------------------------------------------------------------ 第3b〜3d: 生命の段階と生き物(確率モデル=仮説)
   // 段階の遷移は「液体の水がある期間」だけ進むポアソン過程。待ち時間の平均は地球の実績(約45億年で知的生命)を目安にした。
-  const STAGE_JP = ['生命なし', '前生物化学', '単純な生命(微生物)', '酸素を出す光合成', '真核生物', '多細胞生物', '複雑な生態系(動物・植物)', '神経系・脳をもつ動物', '知的生命'];
-  const MEAN = [0.2, 0.3, 1.5, 1.0, 1.2, 0.4, 0.15, 0.35]; // Gyr(液体の水がある期間での平均待ち時間)
+  const STAGE_JP = ['生命なし', '前生物化学(有機分子)', '原始的な膜・自己複製', '単純な生命(微生物)', '光合成', '真核生物', '多細胞生物', '複雑な生態系(動物・植物)', '神経系・脳をもつ動物', '知的生命'];
+  // 各段階は水環境での化学反応・自然選択の積算時間に依存。値は仮説モデル。
+  const MEAN = [0.35, 0.25, 1.2, 1.0, 1.1, 0.45, 0.2, 0.4, 0.6]; // Gyr(液体の水がある期間での平均待ち時間)
   const mb = (a) => () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
   const cfg = { ease: 1 }; // 大きいほど生命が生まれにくい世界
 
@@ -84,11 +85,16 @@
     if (p.life && p.real !== false && p.name === '地球') return { stage: 8, real: true, intelligent: true, extinct: false, times: [], ageNow };
     if (p.type !== 'rock' || !env || !env.windows.length) return { stage: 0, extinct: false, times: [], ageNow, intelligent: false };
     const r = mb(Math.floor(seed * 1000003) ^ 0x9e3779b1);
-    const times = []; let hab = 0;
+    // 「生命を配置」するのではなく、海・温度・化学材料がそろった時だけ起源イベントを発生させる。
+    const chemistry = (p.water || 0) * Math.max(0, Math.min(1, (env.now.ts - 180) / 120)) * (p.atm ? 1 : 0.35);
+    const originWait = chemistry > 0.08 ? -0.7 * cfg.ease * Math.log(1 - r()) / chemistry : Infinity;
+    const originAge = habToAge(env.windows, originWait);
+    const times = [originAge]; let hab = originWait;
     for (let i = 0; i < MEAN.length; i++) { hab += -MEAN[i] * cfg.ease * Math.log(1 - r()); times.push(habToAge(env.windows, hab)); }
     let stage = 0; for (let i = 0; i < times.length; i++) if (times[i] !== null && times[i] <= ageNow) stage = i + 1;
-    const extinct = stage > 0 && !env.nowLiquid; // 液体の水の期間が終わったら生命は絶える
-    return { stage: extinct ? 0 : stage, peak: stage, extinct, times, ageNow, intelligent: !extinct && stage >= 8 };
+    const extinct = stage > 0 && !env.nowLiquid;
+    const origin = originAge === null ? null : { age: originAge, route: ['浅い海の有機物＋雷・紫外線','海底熱水噴出孔の化学反応','鉱物表面での分子反応'][Math.floor(r()*3)], molecules: ['水','炭素化合物','窒素化合物','リン・硫黄化合物'] };
+    return { stage: extinct ? 0 : stage, peak: stage, extinct, times, origin, ageNow, intelligent: !extinct && stage >= 9 };
   }
   const SYL2 = ['ア', 'イ', 'ウ', 'エ', 'オ', 'カ', 'キ', 'ク', 'ケ', 'コ', 'サ', 'シ', 'ス', 'セ', 'タ', 'チ', 'テ', 'ト', 'ナ', 'ニ', 'ネ', 'ノ', 'ハ', 'ヒ', 'フ', 'ホ', 'マ', 'ミ', 'ム', 'メ', 'モ', 'ヤ', 'ユ', 'ヨ', 'ラ', 'リ', 'ル', 'ロ'];
   // 生き物(種)を手続き生成する。実在の生物の再現ではなく、惑星の条件と乱数から作る。
@@ -125,13 +131,15 @@
       out.push({ kind, habitat, label, name: nm() + (kind === 3 ? (r() < 0.5 ? '樹' : '草') : kind === 2 ? '魚' : kind === 1 ? '鳥' : kind === 4 ? '人' : '獣'),
         size: base * (0.5 + r() * 1.5) * (kind === 3 ? 1 : sz), legs, plan, col, col2, speed: 0.3 + r() * 1.2, abundance: 0.4 + r() });
     } };
-    if (stage >= 5) add(2, '水中の生物', 'sea', 12 + Math.floor(r() * 13), 0.0006);
+    if (stage >= 3) add(2, '微生物・水中生物', 'sea', Math.min(80, 8 + Math.floor(r() * (stage * stage * 3))), 0.00008);
+    if (stage >= 5) add(2, '水中の生物', 'sea', Math.min(80, 20 + Math.floor(r() * stage * 8)), 0.0006);
     if (stage >= 6) {
-      add(3, '植物', 'land', 14 + Math.floor(r() * 15), 0.004);
-      add(0, '陸上の動物', 'land', 22 + Math.floor(r() * 21), 0.0011);
-      if (atm) add(1, '空を飛ぶ動物', 'air', 10 + Math.floor(r() * 11), 0.0005);
+      const diversity = Math.min(80, 12 + Math.floor(r() * (stage * 9)));
+      add(3, '光合成生物・植物', 'land', diversity, 0.004);
+      add(0, '陸上動物・節足動物など', 'land', Math.min(80, diversity + Math.floor(r() * 20)), 0.0011);
+      if (atm) add(1, '飛翔生物', 'air', Math.min(50, 5 + Math.floor(r() * stage * 5)), 0.0005);
     }
-    if (bio.intelligent) add(4, '知的生命', 'land', 3 + Math.floor(r() * 4), 0.0017);
+    if (bio.intelligent) add(4, '知的生命', 'land', 1 + Math.floor(r() * 3), 0.0017);
     return out;
   }
   return { starLumAt, stateAt, tidalLockGyr, environment, STATE_JP, STATE_COLOR, TEQ, biosphere, species, plantColor, STAGE_JP, cfg };
