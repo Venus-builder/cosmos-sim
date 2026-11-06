@@ -132,7 +132,7 @@
 
 <details id="opts" class="panel" open>
   <summary>設定</summary>
-  <div style="margin:6px 0 10px;color:#9fb4ff;font-size:13px;font-weight:bold">アプリ バージョン：v42</div><details style="font-size:12px;margin-bottom:8px"><summary>変更履歴</summary><div>v30：生命の起源を化学反応から確率的に開始し、環境依存の生物多様化と地表滞在中の文明自動進行を追加。<br>v31：知的生命の種族名と生命起源の反応経路を地表情報に表示。<br>v32：地表時間を宇宙共通の再生・逆再生・速度操作に接続し、生態系の時間進行を連動。<br>v33：文明初期化処理に混入した改行文字を修正し、JavaScript構文エラーを解消。<br>v34：地表生態系の二重進行を解消し、文明の進行を地表世界時間に同期。文明パネルから新規世界を作る操作を廃止。<br>v35：宇宙・地表の星の密度と輝度、銀河帯のコントラストを強化。<br>v36：惑星ごとに生態系を保存して再訪時に復元し、生態系の時間遅れを実際に進んだ年数で補正。<br>v37：時間倍率を最大10億倍まで拡張し、高速時間のプリセットを追加。<br>v38：惑星を移動しても文明の観察状態を同じ惑星ごとに保持。<br>v39：知能発達指標・遺伝情報の観察画面を追加。<br>v40：文明画面に国家・集団関係の試験表示を追加。<br>v41：国家段階の成立状況と社会組織能力を文明観察欄に表示。<br>v42：追加コードに混入した不正な改行表記を修正し、JavaScript構文と画面表示を正常化。</div></details>
+  <div style="margin:6px 0 10px;color:#9fb4ff;font-size:13px;font-weight:bold">アプリ バージョン：v43</div><details style="font-size:12px;margin-bottom:8px"><summary>変更履歴</summary><div>v30：生命の起源を化学反応から確率的に開始し、環境依存の生物多様化と地表滞在中の文明自動進行を追加。<br>v31：知的生命の種族名と生命起源の反応経路を地表情報に表示。<br>v32：地表時間を宇宙共通の再生・逆再生・速度操作に接続し、生態系の時間進行を連動。<br>v33：文明初期化処理に混入した改行文字を修正し、JavaScript構文エラーを解消。<br>v34：地表生態系の二重進行を解消し、文明の進行を地表世界時間に同期。文明パネルから新規世界を作る操作を廃止。<br>v35：宇宙・地表の星の密度と輝度、銀河帯のコントラストを強化。<br>v36：惑星ごとに生態系を保存して再訪時に復元し、生態系の時間遅れを実際に進んだ年数で補正。<br>v37：時間倍率を最大10億倍まで拡張し、高速時間のプリセットを追加。<br>v38：惑星を移動しても文明の観察状態を同じ惑星ごとに保持。<br>v39：知能発達指標・遺伝情報の観察画面を追加。<br>v40：文明画面に国家・集団関係の試験表示を追加。<br>v41：国家段階の成立状況と社会組織能力を文明観察欄に表示。<br>v42：追加コードに混入した不正な改行表記を修正し、JavaScript構文と画面表示を正常化。<br>v43：遺伝情報画面を拡充し、32文字の仮想塩基列・複数形質指標・知能段階の一覧を惑星ごとに表示。</div></details>
   <label>粒子数
     <select id="np">
       <option value="48">11万 (48³)</option>
@@ -237,13 +237,13 @@
 <div id="toast"></div>
 <div id="fatal"><div id="fatalMsg"></div></div>
 
-<script src="cosmology.js?v=42"></script>
-<script src="astro.js?v=42"></script>
-<script src="life.js?v=42"></script>
-<script src="civ.js?v=42"></script>
-<script src="eco.js?v=42"></script>
-<script src="scenario.js?v=42"></script>
-<script src="scenes.js?v=42"></script>
+<script src="cosmology.js?v=43"></script>
+<script src="astro.js?v=43"></script>
+<script src="life.js?v=43"></script>
+<script src="civ.js?v=43"></script>
+<script src="eco.js?v=43"></script>
+<script src="scenario.js?v=43"></script>
+<script src="scenes.js?v=43"></script>
 <script>
 (async function () {
 'use strict';
@@ -1044,7 +1044,30 @@ $('bLand').onclick = () => scenes.land();
 // ------------------------------------------------------------------ 生命のいる惑星へ飛ぶ
 $('lifeX').onclick = () => { $('lifeP').style.display = 'none'; };
 $('dnaX').onclick = () => { $('dnaP').style.display = 'none'; };
-$('bDNA').onclick = () => { const p=scenes.getPlanet && scenes.getPlanet(); const body=$('dnaBody'); $('dnaP').style.display=''; const seed=Math.floor((p&&p.seed||1)*1e6)>>>0; const hash=(n)=>{let x=(seed^Math.imul(n+1,0x45d9f3b))>>>0;x=Math.imul(x^(x>>>16),0x45d9f3b);return (x^(x>>>16))>>>0;}; const bio=p&&p.bio||{}; const score=Math.round((bio.intelligence||0)*100); body.innerHTML='<p>これは惑星シードから生成した<strong>仮想遺伝マーカー</strong>です。実在のDNA配列ではありません。</p><p>系統識別子：'+seed.toString(16).toUpperCase()+'</p><p>遺伝マーカー：'+Array.from({length:12},(_,i)=>['A','T','G','C'][hash(i)%4]).join('')+'</p><p>変異傾向：'+(hash(20)%1000)/1000+'</p><p>環境適応指標：'+(hash(21)%1000)/1000+'</p><p>知能発達度（仮説指標）：'+score+'%</p><p>生命段階：'+(Life.STAGE_JP[bio.stage]||'未確認')+'</p><p>※生物の実際の遺伝子・進化履歴を計算している段階ではなく、観察用の暫定表示です。</p>'; };
+$('bDNA').onclick = () => {
+  const p = scenes.getPlanet && scenes.getPlanet(), body = $('dnaBody');
+  $('dnaP').style.display = '';
+  const bio = p && p.bio || {}, seed = Math.floor((p && p.seed || 1) * 1e6) >>> 0;
+  const hash = (n) => { let x=(seed^Math.imul(n+1,0x45d9f3b))>>>0; x=Math.imul(x^(x>>>16),0x45d9f3b); return (x^(x>>>16))>>>0; };
+  const markers = Array.from({length:32},(_,i)=>['A','T','G','C'][hash(i)%4]).join('');
+  const traits = [
+    ['代謝・エネルギー',hash(40)%100],['環境耐性',hash(41)%100],['繁殖効率',hash(42)%100],
+    ['移動能力',hash(43)%100],['感覚・情報処理',hash(44)%100],['学習傾向',hash(45)%100]
+  ];
+  const intelligence = Math.max(0,Math.min(100,Number(bio.intelligence||0)*100));
+  const stage = Life.STAGE_JP[bio.stage] || '未確認';
+  const stages = ['化学反応','膜を持つ原始細胞','単細胞生物','光合成・代謝の多様化','真核細胞','多細胞化','複雑な生態系','神経系','学習・行動','知的生命'];
+  const stageIndex = Math.max(0,Math.min(stages.length-1,Number(bio.stage)||0));
+  body.innerHTML = '<p><b>対象：</b>'+((p&&p.name)||'惑星')+' / '+stage+'</p>'+
+    '<p><b>系統識別子：</b>'+seed.toString(16).toUpperCase()+'</p>'+
+    '<p><b>仮想塩基列（32文字）</b><br><code style="word-break:break-all">'+markers+'</code></p>'+
+    '<p><b>遺伝形質モデル（シード由来の参考値）</b></p>'+
+    traits.map(t=>'<div>'+t[0]+' <span style="float:right">'+t[1]+'/100</span><div style="height:5px;background:#202a45;border-radius:4px"><div style="height:5px;width:'+t[1]+'%;background:var(--accent);border-radius:4px"></div></div></div>').join('')+
+    '<p><b>知能発達：</b>'+intelligence.toFixed(1)+'%（惑星生命モデルの指標）</p>'+
+    '<p><b>進化段階：</b>'+stages.map((s,i)=>(i===stageIndex?'▶ ':'　')+s).join('<br>')+'</p>'+
+    '<p><b>変異傾向：</b>'+((hash(20)%1000)/1000).toFixed(3)+' / <b>環境適応指標：</b>'+((hash(21)%1000)/1000).toFixed(3)+'</p>'+
+    '<p style="color:var(--dim)">注意：塩基列・形質値は惑星シードから作った観察用の仮想値です。実際のDNA配列や、遺伝子が生存・繁殖を変える進化計算ではありません。</p>';
+};
 function paintLife(list, done, scanned) {
   const el = $('lifeBody'); $('lifeP').style.display = '';
   el.innerHTML = '';
