@@ -1252,7 +1252,7 @@ function create(env) {
         if (lvl >= 2) { tryT(1, 0.16 * town, 0.007, 1.2, 60); tryT(0, 0.05 * town, 0.0035, 1.0, 63); }
         if (lvl >= 3) tryT(2, 0.07 * core, 0.035, 0.5, 66);
         if (lvl >= 4) tryT(3, 0.06 * core, 0.07, 0.6, 69);
-        const tryS = (lv, prob, size, wr, k) => { if (lvl >= lv + 1 && r(k) < prob && Math.hypot(X(k + 1) - sf.wx, Z(k + 1) - sf.wz) > 0.06) add(5, X(k + 1), Z(k + 1), size * (0.8 + 0.4 * r(k + 2)), null, lv, 0, 0, 0, 0, wr, wall[lv], roof[lv]); };
+        const roadNoise = noise3js((ci + 0.5) * cell * 0.35, (cj + 0.5) * cell * 0.35, 31);\n        const roadBand = Math.abs(roadNoise - 0.5) < (lvl >= 3 ? 0.035 : 0.018);\n        if (roadBand && Math.hypot(X(70)-sf.wx,Z(70)-sf.wz)>0.06) add(6,X(70),Z(70),0.0045,null,lvl,0,0,0,0,0.02,[0.16,0.17,0.18],[0.2,0.21,0.22]);\n        const tryS = (lv, prob, size, wr, k) => { if (lvl >= lv + 1 && r(k) < prob && Math.hypot(X(k + 1) - sf.wx, Z(k + 1) - sf.wz) > 0.06) add(5, X(k + 1), Z(k + 1), size * (0.8 + 0.4 * r(k + 2)), null, lv, 0, 0, 0, 0, wr, wall[lv], roof[lv]); };
         tryS(0, lvl >= 2 ? 0.006 : 0.03, 0.0035, 1.0, 30); if (lvl < 2) tryS(1, 0.015, 0.007, 1.2, 33);
       }
     }
