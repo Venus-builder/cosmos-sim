@@ -38,7 +38,7 @@
   #tl { flex: 1; width: 100%; }
   #events { gap: 6px; }
   #note { font-size: 11px; color: var(--dim); line-height: 1.5; }
-  #markers { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+  #markers { position: fixed; inset: 0; z-index: 20; pointer-events: none; overflow: hidden; }
   .mk { position: absolute; left: 0; top: 0; pointer-events: auto; background: rgba(8,12,28,.78); border: 1px solid var(--accent);
     color: var(--fg); border-radius: 999px; padding: 4px 10px; font-size: 12px; min-height: 0 !important; white-space: nowrap; }
   .mk.pl { border-color: var(--accent2); }
@@ -67,7 +67,7 @@
   #nearP { left: 16px; top: 300px; width: 320px; max-height: calc(100dvh - 500px); overflow-y: auto; font-size: 12px; line-height: 1.5; }
   #nearP button.hit { display: block; width: 100%; text-align: left; margin-top: 4px; }
   #nearP button.hit.on { background: var(--accent); color: #02030a; }
-  #lifeP { left: 16px; top: 250px; width: 300px; max-height: calc(100dvh - 450px); overflow-y: auto; font-size: 12px; line-height: 1.5; }
+  #lifeP { left: 16px; top: 250px; width: 300px; max-height: calc(100dvh - 450px); overflow-y: auto; font-size: 12px; line-height: 1.5; z-index: 50; }
   #lifeP button.hit { display: block; width: 100%; text-align: left; margin-top: 4px; }
   #civ pre { margin: 4px 0; font-size: 11px; line-height: 1.35; white-space: pre-wrap; color: var(--fg); }
   #civ { right: 16px; top: 64px; width: 320px; max-height: calc(100dvh - 300px); overflow-y: auto; font-size: 12px; line-height: 1.5; }
@@ -109,7 +109,7 @@
     #ecoP, #scnP { left: 8px; right: 8px; top: auto; bottom: 215px; width: auto; max-height: 36vh; }
     #objP { left: 8px; right: 8px; top: auto; bottom: 215px; width: auto; max-height: 34vh; }
     #nearP { left: 8px; right: 8px; top: auto; bottom: 215px; width: auto; max-height: 34vh; }
-    #lifeP { left: 8px; right: 8px; top: auto; bottom: 215px; width: auto; max-height: 34vh; }
+    #lifeP { left: 8px; right: 8px; top: auto; bottom: 215px; width: auto; max-height: 34vh; z-index: 50; }
     #civ { left: 8px; right: 8px; top: auto; bottom: 215px; width: auto; max-height: 34vh; }
     #bUI { top: 46%; }
   }
@@ -132,7 +132,7 @@
 
 <details id="opts" class="panel" open>
   <summary>設定</summary>
-  <div style="margin:6px 0 10px;color:#9fb4ff;font-size:13px;font-weight:bold">アプリ バージョン：v24</div><details style="font-size:12px;margin-bottom:8px"><summary>変更履歴</summary><div>v24：生命探索の開始位置を毎回変更し、生命探索で表示する銀河を固定しないよう修正。</div></details>
+  <div style="margin:6px 0 10px;color:#9fb4ff;font-size:13px;font-weight:bold">アプリ バージョン：v25</div><details style="font-size:12px;margin-bottom:8px"><summary>変更履歴</summary><div>v25：生命のいる惑星一覧を天体ラベルより前面に表示し、惑星選択後の遷移を修正。</div></details>
   <label>粒子数
     <select id="np">
       <option value="48">11万 (48³)</option>
@@ -231,13 +231,13 @@
 <div id="toast"></div>
 <div id="fatal"><div id="fatalMsg"></div></div>
 
-<script src="cosmology.js?v=24"></script>
-<script src="astro.js?v=24"></script>
-<script src="life.js?v=24"></script>
-<script src="civ.js?v=24"></script>
-<script src="eco.js?v=24"></script>
-<script src="scenario.js?v=24"></script>
-<script src="scenes.js?v=24"></script>
+<script src="cosmology.js?v=25"></script>
+<script src="astro.js?v=25"></script>
+<script src="life.js?v=25"></script>
+<script src="civ.js?v=25"></script>
+<script src="eco.js?v=25"></script>
+<script src="scenario.js?v=25"></script>
+<script src="scenes.js?v=25"></script>
 <script>
 (async function () {
 'use strict';
