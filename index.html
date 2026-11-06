@@ -132,7 +132,7 @@
 
 <details id="opts" class="panel" open>
   <summary>設定</summary>
-  <div style="margin:6px 0 10px;color:#9fb4ff;font-size:13px;font-weight:bold">アプリ バージョン：v32</div><details style="font-size:12px;margin-bottom:8px"><summary>変更履歴</summary><div>v30：生命の起源を化学反応から確率的に開始し、環境依存の生物多様化と地表滞在中の文明自動進行を追加。<br>v31：知的生命の種族名と生命起源の反応経路を地表情報に表示。<br>v32：地表時間を宇宙共通の再生・逆再生・速度操作に接続し、生態系の時間進行を連動。</div></details>
+  <div style="margin:6px 0 10px;color:#9fb4ff;font-size:13px;font-weight:bold">アプリ バージョン：v33</div><details style="font-size:12px;margin-bottom:8px"><summary>変更履歴</summary><div>v30：生命の起源を化学反応から確率的に開始し、環境依存の生物多様化と地表滞在中の文明自動進行を追加。<br>v31：知的生命の種族名と生命起源の反応経路を地表情報に表示。<br>v32：地表時間を宇宙共通の再生・逆再生・速度操作に接続し、生態系の時間進行を連動。<br>v33：文明初期化処理に混入した改行文字を修正し、JavaScript構文エラーを解消。</div></details>
   <label>粒子数
     <select id="np">
       <option value="48">11万 (48³)</option>
@@ -231,13 +231,13 @@
 <div id="toast"></div>
 <div id="fatal"><div id="fatalMsg"></div></div>
 
-<script src="cosmology.js?v=32"></script>
-<script src="astro.js?v=32"></script>
-<script src="life.js?v=32"></script>
-<script src="civ.js?v=32"></script>
-<script src="eco.js?v=32"></script>
-<script src="scenario.js?v=32"></script>
-<script src="scenes.js?v=32"></script>
+<script src="cosmology.js?v=33"></script>
+<script src="astro.js?v=33"></script>
+<script src="life.js?v=33"></script>
+<script src="civ.js?v=33"></script>
+<script src="eco.js?v=33"></script>
+<script src="scenario.js?v=33"></script>
+<script src="scenes.js?v=33"></script>
 <script>
 (async function () {
 'use strict';
@@ -1064,7 +1064,8 @@ $('bLife').onclick = async () => {
 // ------------------------------------------------------------------ 文明の実験(civ.js)
 let civFollow = null, civ = null, civKey = null, civRunning = true, civRuns = 0, civMsSeen = 0, civSeedNo = 0, civPaint = 0;
 const fmtPop = (x) => (x >= 1e8 ? (x / 1e8).toFixed(2) + '億' : x >= 1e4 ? (x / 1e4).toFixed(1) + '万' : Math.round(x).toString());
-function startCivWorld() { const t = scenes.civTarget(); if (!t) return; civRuns++; civSeedNo = (Math.imul(SEED, 2654435761) ^ Math.imul(t.seed + 1, 40503) ^ civRuns * 7919) >>> 0; civ = Civ.create({ seed: civSeedNo }); civFollow = civ.pickPerson('oldest'); civKey = t.key; civMsSeen = 0; civRunning = true; $('civPause').textContent = '⏸'; paintCiv(true); }\n$('bCiv').onclick = () => { const v = $('civ').style.display === 'none'; $('civ').style.display = v ? '' : 'none'; if (v) { if (!civ || civKey !== (scenes.civTarget() || {}).key) startCivWorld(); paintCiv(true); } };
+function startCivWorld() { const t = scenes.civTarget(); if (!t) return; civRuns++; civSeedNo = (Math.imul(SEED, 2654435761) ^ Math.imul(t.seed + 1, 40503) ^ civRuns * 7919) >>> 0; civ = Civ.create({ seed: civSeedNo }); civFollow = civ.pickPerson('oldest'); civKey = t.key; civMsSeen = 0; civRunning = true; $('civPause').textContent = '⏸'; paintCiv(true); }
+$('bCiv').onclick = () => { const v = $('civ').style.display === 'none'; $('civ').style.display = v ? '' : 'none'; if (v) { if (!civ || civKey !== (scenes.civTarget() || {}).key) startCivWorld(); paintCiv(true); } };
 // ------------------------------------------------------------------ 生態系パネル
 $('ecoX').onclick = () => { $('ecoP').style.display = 'none'; };
 $('bEco').onclick = () => { const v = $('ecoP').style.display === 'none'; $('ecoP').style.display = v ? '' : 'none'; if (v) $('scnP').style.display = 'none'; };
