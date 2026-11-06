@@ -132,7 +132,7 @@
 
 <details id="opts" class="panel" open>
   <summary>設定</summary>
-  <div style="margin:6px 0 10px;color:#9fb4ff;font-size:13px;font-weight:bold">アプリ バージョン：v1.0.0</div>
+  <div style="margin:6px 0 10px;color:#9fb4ff;font-size:13px;font-weight:bold">アプリ バージョン：v24</div><details style="font-size:12px;margin-bottom:8px"><summary>変更履歴</summary><div>v24：生命探索の開始位置を毎回変更し、生命探索で表示する銀河を固定しないよう修正。</div></details>
   <label>粒子数
     <select id="np">
       <option value="48">11万 (48³)</option>
@@ -231,13 +231,13 @@
 <div id="toast"></div>
 <div id="fatal"><div id="fatalMsg"></div></div>
 
-<script src="cosmology.js?v=23"></script>
-<script src="astro.js?v=23"></script>
-<script src="life.js?v=23"></script>
-<script src="civ.js?v=23"></script>
-<script src="eco.js?v=23"></script>
-<script src="scenario.js?v=23"></script>
-<script src="scenes.js?v=21"></script>
+<script src="cosmology.js?v=24"></script>
+<script src="astro.js?v=24"></script>
+<script src="life.js?v=24"></script>
+<script src="civ.js?v=24"></script>
+<script src="eco.js?v=24"></script>
+<script src="scenario.js?v=24"></script>
+<script src="scenes.js?v=24"></script>
 <script>
 (async function () {
 'use strict';
@@ -1053,7 +1053,7 @@ $('bLife').onclick = async () => {
   if (st.t < 9) { st.seek = cosmo.tNow; setDir(0); toast('宇宙が若すぎます。現在へ移動します。着いたらもう一度 🌱 を押してください', 5000); return; }
   toast('生命のいる銀河を探しています…', 2500);
   const halos = await findHalos(), tNow = st.t;
-  const sp = halos.filter((h) => Astro.galaxyType(h.Mh) === 'spiral')[0] || halos[0];
+  const spiralHalos = halos.filter((h) => Astro.galaxyType(h.Mh) === 'spiral');\n  const sp = spiralHalos[Math.floor(Math.random() * spiralHalos.length)] || halos[Math.floor(Math.random() * halos.length)];
   if (!sp) return;
   clearHaloMarks();
   enterScene(() => { scenes.enterGalaxy({ Mh: sp.Mh, rho: sp.rho, seed: sp.seed, tNow }); setTimeout(() => { paintLife([], false, 0); scenes.scanLife(paintLife); }, 300); });
