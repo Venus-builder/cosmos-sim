@@ -971,27 +971,37 @@ function create(env) {
     if (S.kind !== 'galaxy') return false;
     const g = S.gal, tok = S.scanTok = {}, start = Math.floor(Math.random() * g.n);
     let scanned = 0; const found = S.gfound = [];
+    const MAX_SCAN = Math.min(1200, g.n), MAX_FOUND = 8;
     const chunk = () => {
       if (S.scanTok !== tok || S.kind !== 'galaxy') return;
-      const t0 = performance.now(); let changed = false;
-      while (performance.now() - t0 < 10 && scanned < 8000 && found.length < 12) {
-        const idx = (start + scanned * 7919) % g.n; scanned++;
-        const m = g.sts.mass[idx], age = g.tNow - g.sts.birth[idx];
-        if (m < 0.6 || m > 1.4 || age < 2.5) continue;
-        const sys = astro.makeSystem(specOf(idx));
-        let best = null;
-        sys.planets.forEach((p, k) => {
-          if (p.type !== 'rock') return;
-          const ev = env.life.environment(p, sys.star, sys.star.age), bio = env.life.biosphere(p, sys.star, sys.star.age, ev, p.seed || 1);
-          if (bio.stage >= 6 && (!best || bio.stage > best.stage)) best = { i: idx, k, name: p.name, stage: bio.stage, intelligent: !!bio.intelligent };
-        });
-        if (best) { found.push(best); changed = true; }
+      try {
+        // 1フレームに恒星1個だけ調べる。大量の同期計算で画面全体が固まるのを防ぐ。
+        if (scanned < MAX_SCAN && found.length < MAX_FOUND) {
+          const idx = (start + scanned * 7919) % g.n; scanned++;
+          const m = g.sts.mass[idx], age = g.tNow - g.sts.birth[idx];
+          if (m >= 0.6 && m <= 1.4 && age >= 2.5) {
+            const sys = astro.makeSystem(specOf(idx));
+            let best = null;
+            sys.planets.forEach((p, k) => {
+              if (p.type !== 'rock') return;
+              const ev = env.life.environment(p, sys.star, sys.star.age);
+              const bio = env.life.biosphere(p, sys.star, sys.star.age, ev, p.seed || 1);
+              if (bio.stage >= 6 && (!best || bio.stage > best.stage)) best = { i: idx, k, name: p.name, stage: bio.stage, intelligent: !!bio.intelligent };
+            });
+            if (best) found.push(best);
+          }
+        }
+        const done = scanned >= MAX_SCAN || found.length >= MAX_FOUND;
+        found.sort((a, b) => b.stage - a.stage);
+        if (found.length) addGalaxyLabels();
+        cb(found.slice(), done, scanned);
+        if (!done) requestAnimationFrame(chunk);
+      } catch (e) {
+        console.error('生命探索処理エラー', e);
+        cb(found.slice(), true, scanned, e);
       }
-      const done = scanned >= 8000 || found.length >= 12;
-      if (changed) { found.sort((a, b) => b.stage - a.stage); addGalaxyLabels(); }
-      cb(found.slice(), done, scanned);
-      if (!done) requestAnimationFrame(chunk);
     };
+    cb([], false, 0);
     requestAnimationFrame(chunk);
     return true;
   }
