@@ -132,7 +132,7 @@
 
 <details id="opts" class="panel" open>
   <summary>設定</summary>
-  <div style="margin:6px 0 10px;color:#9fb4ff;font-size:13px;font-weight:bold">アプリ バージョン：v33</div><details style="font-size:12px;margin-bottom:8px"><summary>変更履歴</summary><div>v30：生命の起源を化学反応から確率的に開始し、環境依存の生物多様化と地表滞在中の文明自動進行を追加。<br>v31：知的生命の種族名と生命起源の反応経路を地表情報に表示。<br>v32：地表時間を宇宙共通の再生・逆再生・速度操作に接続し、生態系の時間進行を連動。<br>v33：文明初期化処理に混入した改行文字を修正し、JavaScript構文エラーを解消。</div></details>
+  <div style="margin:6px 0 10px;color:#9fb4ff;font-size:13px;font-weight:bold">アプリ バージョン：v34</div><details style="font-size:12px;margin-bottom:8px"><summary>変更履歴</summary><div>v30：生命の起源を化学反応から確率的に開始し、環境依存の生物多様化と地表滞在中の文明自動進行を追加。<br>v31：知的生命の種族名と生命起源の反応経路を地表情報に表示。<br>v32：地表時間を宇宙共通の再生・逆再生・速度操作に接続し、生態系の時間進行を連動。<br>v33：文明初期化処理に混入した改行文字を修正し、JavaScript構文エラーを解消。<br>v34：地表生態系の二重進行を解消し、文明の進行を地表世界時間に同期。文明パネルから新規世界を作る操作を廃止。</div></details>
   <label>粒子数
     <select id="np">
       <option value="48">11万 (48³)</option>
@@ -193,8 +193,7 @@
 <div id="civ" class="panel" style="display:none">
   <div class="row" style="justify-content:space-between"><b>🏛 文明の実験(仮説)</b><button class="small" id="civX">✕</button></div>
   <div style="color:var(--dim);font-size:11px">知的生命の小さな集団を動かします。集団の全員が「ひとり」ずつの個人で、結婚・出産・死亡をし、知っている技術を組み合わせて試し、人から人へ教え合います(追跡する人数の上限は2000人=注目する地域の大きさ)。順番・時期・中身は世界ごとの乱数で決まり、筋書きはありません(「計算機」などの名前は、能力の水準から後付け)。実際の人類史でも未来の予測でもありません。</div>
-  <div class="row"><button class="small" id="civGo">▶ 新しい世界で始める</button><button class="small" id="civPause">⏸</button>
-    <select id="civSpeed"><option value="100">100年/秒</option><option value="1000" selected>1000年/秒</option><option value="10000">1万年/秒</option><option value="100000">10万年/秒</option></select></div>
+  <div class="row"><button class="small" id="civPause">⏸</button><span style="font-size:12px;color:var(--dim)">文明の時間は地表の世界時間に同期</span></div>
   <div id="civBody"></div>
   <details id="civInd" open style="margin-top:6px"><summary><b>👤 ひとりずつ追う(全員が個人)</b></summary>
     <div class="row" style="margin-top:4px"><select id="indKind"><option value="oldest">最年長</option><option value="inventor">最多の発明者</option><option value="parent">子の多い人</option><option value="newest">最近生まれた人</option><option value="random">ランダム</option></select><button class="small" id="indGo">この人を追う</button></div>
@@ -231,13 +230,13 @@
 <div id="toast"></div>
 <div id="fatal"><div id="fatalMsg"></div></div>
 
-<script src="cosmology.js?v=33"></script>
-<script src="astro.js?v=33"></script>
-<script src="life.js?v=33"></script>
-<script src="civ.js?v=33"></script>
-<script src="eco.js?v=33"></script>
-<script src="scenario.js?v=33"></script>
-<script src="scenes.js?v=33"></script>
+<script src="cosmology.js?v=34"></script>
+<script src="astro.js?v=34"></script>
+<script src="life.js?v=34"></script>
+<script src="civ.js?v=34"></script>
+<script src="eco.js?v=34"></script>
+<script src="scenario.js?v=34"></script>
+<script src="scenes.js?v=34"></script>
 <script>
 (async function () {
 'use strict';
@@ -1062,9 +1061,9 @@ $('bLife').onclick = async () => {
 };
 
 // ------------------------------------------------------------------ 文明の実験(civ.js)
-let civFollow = null, civ = null, civKey = null, civRunning = true, civRuns = 0, civMsSeen = 0, civSeedNo = 0, civPaint = 0;
+let civFollow = null, civ = null, civKey = null, civRunning = true, civRuns = 0, civMsSeen = 0, civSeedNo = 0, civPaint = 0, civWorldLast = 0;
 const fmtPop = (x) => (x >= 1e8 ? (x / 1e8).toFixed(2) + '億' : x >= 1e4 ? (x / 1e4).toFixed(1) + '万' : Math.round(x).toString());
-function startCivWorld() { const t = scenes.civTarget(); if (!t) return; civRuns++; civSeedNo = (Math.imul(SEED, 2654435761) ^ Math.imul(t.seed + 1, 40503) ^ civRuns * 7919) >>> 0; civ = Civ.create({ seed: civSeedNo }); civFollow = civ.pickPerson('oldest'); civKey = t.key; civMsSeen = 0; civRunning = true; $('civPause').textContent = '⏸'; paintCiv(true); }
+function startCivWorld() { const t = scenes.civTarget(); if (!t) return; civRuns++; civSeedNo = (Math.imul(SEED, 2654435761) ^ Math.imul(t.seed + 1, 40503) ^ civRuns * 7919) >>> 0; civ = Civ.create({ seed: civSeedNo }); civFollow = civ.pickPerson('oldest'); civKey = t.key; civMsSeen = 0; civWorldLast = scenes.worldTime(); civRunning = true; $('civPause').textContent = '⏸'; paintCiv(true); }
 $('bCiv').onclick = () => { const v = $('civ').style.display === 'none'; $('civ').style.display = v ? '' : 'none'; if (v) { if (!civ || civKey !== (scenes.civTarget() || {}).key) startCivWorld(); paintCiv(true); } };
 // ------------------------------------------------------------------ 生態系パネル
 $('ecoX').onclick = () => { $('ecoP').style.display = 'none'; };
@@ -1149,10 +1148,10 @@ function paintPerson() {
     + '<div class="tl" style="max-height:140px">' + p.log.slice().reverse().map((l) => '<div>' + fmtYears(l.year) + ' ' + l.text + '</div>').join('') + '</div>';
 }
 $('civPause').onclick = () => { civRunning = !civRunning; $('civPause').textContent = civRunning ? '⏸' : '▶'; };
-$('civGo').onclick = () => { startCivWorld(); const t = scenes.civTarget(); if (t) logVisit('文明の実験 #' + civSeedNo + '(' + t.name + ')'); };
 function civTick(dt) {
   if (!civ || !civRunning || civ.ended) return;
-  let left = Number($('civSpeed').value) * dt; const t0 = performance.now();
+  const worldNow = scenes.worldTime(), elapsed = Math.max(0, worldNow - civWorldLast); civWorldLast = worldNow;
+  let left = elapsed; const t0 = performance.now();
   while (left > 0.01 && performance.now() - t0 < 8 && !civ.ended) { const d = Math.min(civ.stepSize(), left); civ.step(d); left -= d; }
   const names = Object.keys(civ.ms);
   if (names.length > civMsSeen) { for (const k of names.slice(civMsSeen)) { const m = Civ.MILESTONES.find((x) => x.key === k); logVisit('文明#' + civSeedNo + ': ' + m.jp + ' ' + fmtYears(civ.ms[k])); } civMsSeen = names.length; }
