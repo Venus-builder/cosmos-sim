@@ -942,36 +942,29 @@ function create(env) {
     return { seed: astro.hashSeed(g.seed, i), mass: g.sts.mass[i], Z: astro.metallicity(g, birth, r), age: g.tNow - birth, name: '恒星 #' + i };
   }
   function flyTo(i, k) {
-    if (S.kind !== 'galaxy') return;
+    if (S.kind !== 'galaxy') { env.toast('銀河画面から生命惑星を選択してください'); return; }
     const g = S.gal;
     if (!g || !Number.isInteger(i) || i < 0 || i >= g.n || !Number.isInteger(k) || k < 0) {
-      env.toast('生命のいる惑星データが不正です。もう一度生命探索してください'); return;
+      env.toast('生命惑星データが不正です。生命探索をやり直してください'); return;
     }
-    // 遷移開始時点で探索を停止。探索結果の再描画が遷移中に割り込むのを防ぐ。
     S.scanTok = null;
-    clearLabels();
-    fade(() => {
-      // 一覧を作った時と同じ specOf() で恒星系を再生成する。
-      const sys = astro.makeSystem(specOf(i));
-      sys.gal = { type: g.type, r: g.A[i * 4] };
-      // 既存の銀河スタックを整理し、恒星系→惑星の順に確実に積む。
-      S.stack = ['cosmos'];
-      enterSystem(sys, 'galaxy');
-      if (!S.sys || !S.sys.planets[k] || S.sys.planets[k].type !== 'rock') {
-        S.stack = ['cosmos'];
-        S.kind = 'galaxy';
-        addGalaxyLabels();
-        env.toast('対象の惑星を再生成できませんでした。生命探索をやり直してください');
-        return;
-      }
-      // 恒星系を作った直後に惑星状態まで確定させる。遅延コールバックによる
-      // 銀河状態への巻き戻りを避け、画面遷移を一続きで完了する。
-      if (S.kind !== 'system' || !S.sys || !S.sys.planets[k] || S.sys.planets[k].type !== 'rock') {
-        env.toast('対象の惑星を再生成できませんでした。生命探索をやり直してください');
-        return;
-      }
-      enterPlanet(k);
+    const sys = astro.makeSystem(specOf(i));
+    sys.gal = { type: g.type, r: g.A[i * 4] };
+    if (!sys.planets[k] || sys.planets[k].type !== 'rock') { env.toast('対象惑星を再生成できませんでした'); return; }
+    // フェード・タイマーを介さず惑星状態まで直接確定させる。
+    S.stack = ['cosmos', 'galaxy'];
+    S.sys = sys; S.clock = 0; S.pl = sys.planets[k]; S.plIdx = k;
+    sys.planets.forEach((p) => {
+      if (!p.env) p.env = env.life.environment(p, sys.star, sys.star.age);
+      if (!p.bio) p.bio = sys.real && p.name !== '地球' ? { stage: 0, real: true } : p.type === 'rock' ? env.life.biosphere(p, sys.star, sys.star.age, p.env, p.seed || 1) : null;
     });
+    S.orbit = sys.planets.map((p) => astro.orbitPoints(p, 140).map(compress));
+    const sq = Math.sqrt(sys.star.L);
+    S.hzPts = [0.95 * sq, 1.67 * sq].flatMap((rr) => Array.from({ length: 120 }, (_, n) => { const a = n / 120 * Math.PI * 2; return compress([rr * Math.cos(a), 0, rr * Math.sin(a)]); }));
+    const maxA = sys.planets.reduce((m, p) => Math.max(m, p.a * (1 + p.e)), 1);
+    cams.system.fly = false; cams.system.dist = Math.max(2.2, compress([maxA, 0, 0])[0] * 2.3);
+    S.kind = 'planet'; S.clock = 0; S.stack.push('system'); cams.planet.dist = 4.2;
+    clearLabels(); env.onEnter('planet');
   }
   // 生命のいる惑星を探す(太陽に近い恒星を順に調べる。結果は少しずつ cb に渡す)
   function scanLife(cb) {
