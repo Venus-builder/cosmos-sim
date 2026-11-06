@@ -1396,7 +1396,7 @@ function create(env) {
         big: p.name + 'の地表',
         rows: [['太陽の高さ', sel + '°(' + dn + ')'], ['緯度・経度', (sf.lat * 180 / Math.PI).toFixed(1) + '° / ' + (sf.lon * 180 / Math.PI).toFixed(1) + '°'], ['表面重力', p.g.toFixed(2) + ' g'],
           ['気温(推定の平均)', Math.round(p.tsurf - 273.15) + ' ℃'], ['大気', p.atm ? (p.kind === 'venus' ? '厚い(地表は灼熱)' : 'あり') : 'なし(空は黒く、星が昼でも見える)'],
-          ['生命', bioText(p)], ['見える生き物', S.fauna.length ? S.fauna.length + ' 種(手続き生成): ' + S.fauna.slice(0, 5).map((x) => x.name).join('・') + (S.fauna.length > 5 ? '…' : '') : 'いない(微生物以下は目に見えない)'], ...(S.civNow ? [['文明の段階', ['なし', '集落(小屋)', '街', '塔・工場', '電灯のともる都市'][S.civNow]]] : []), ['歩いた距離', Math.hypot(sf.wx, sf.wz).toFixed(2) + ' km']] };
+          ['生命', bioText(p)], ...(p.bio && p.bio.origin ? [['生命の起源', p.bio.origin.route + ' / ' + p.bio.origin.molecules.join('・')]] : []), ...(p.bio && p.bio.raceName ? [['知的生命の種族', p.bio.raceName]] : []), ['見える生き物', S.fauna.length ? S.fauna.length + ' 種(環境・進化段階から生成): ' + S.fauna.slice(0, 5).map((x) => x.name).join('・') + (S.fauna.length > 5 ? '…' : '') : 'いない(微生物以下は目に見えない)'], ...(S.civNow ? [['文明の段階', ['なし', '集落(小屋)', '街', '塔・工場', '電灯のともる都市'][S.civNow]]] : []), ['歩いた距離', Math.hypot(sf.wx, sf.wz).toFixed(2) + ' km']] };
     }
     crumb.push('銀河', '恒星系', p.name);
     return { crumb: sys.real ? ['宇宙', '太陽系', p.name] : crumb, era: (KIND_JP[p.kind] || '') + (p.habitable ? ' ★' : ''), big: p.name,
