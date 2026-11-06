@@ -314,37 +314,38 @@ function eraOf(t, a) {
   return '完全消滅: 光子と薄い粒子だけの、冷たく暗いドジッター空間。何も起きない';
 }
 
-// ------------------------------------------------------------------ WebGPU 初期化
-if (!navigator.gpu) {
-  // WebGPU非対応端末向けの2D宇宙表示（iPhone Safari等）
-  const fallbackCanvas = $('c'), fallbackCtx = fallbackCanvas.getContext('2d');
-  if (!fallbackCtx) { fatal('この端末では宇宙描画を開始できません。'); return; }
-  $('era').textContent = '簡易2D表示（GPU機能制限）';
-  $('age').textContent = '宇宙の初期状態';
-  $('zv').textContent = '—'; $('tv').textContent = '—'; $('av').textContent = '—'; $('mode').textContent = '2D簡易描画';
-  $('fatalMsg').innerHTML = 'WebGPU非対応のため、iPhone向け簡易2D表示で起動しました。';
-  const stars = Array.from({length:650}, (_,i)=>({x:Math.random(),y:Math.random(),r:Math.random()*1.5+.2,p:Math.random()*6.28}));
-  let start=performance.now(), lastFallback=0;
-  function fallbackFrame(now){
-    const w=fallbackCanvas.clientWidth,h=fallbackCanvas.clientHeight,dpr=Math.min(devicePixelRatio||1,2);
-    if(fallbackCanvas.width!==Math.floor(w*dpr)||fallbackCanvas.height!==Math.floor(h*dpr)){fallbackCanvas.width=Math.floor(w*dpr);fallbackCanvas.height=Math.floor(h*dpr);}
-    fallbackCtx.setTransform(dpr,0,0,dpr,0,0);fallbackCtx.fillStyle='#02030a';fallbackCtx.fillRect(0,0,w,h);
-    const t=(now-start)/1000, cx=w/2,cy=h/2, expansion=(t%18)/18;
-    for(const q of stars){const rr=(Math.max(w,h)*.04+Math.max(w,h)*.7*((q.x+expansion)%1));const a=.25+.65*(.5+.5*Math.sin(t+q.p));fallbackCtx.fillStyle='rgba(170,200,255,'+a+')';fallbackCtx.beginPath();fallbackCtx.arc(cx+Math.cos(q.p*17)*rr,cy+Math.sin(q.p*13)*rr,q.r,0,Math.PI*2);fallbackCtx.fill();}
-    const glow=fallbackCtx.createRadialGradient(cx,cy,0,cx,cy,Math.min(w,h)*.35);glow.addColorStop(0,'rgba(90,130,255,.16)');glow.addColorStop(1,'rgba(0,0,0,0)');
-    fallbackCtx.fillStyle=glow;fallbackCtx.fillRect(0,0,w,h);
-    if(now-lastFallback>500){$('age').textContent='簡易宇宙表示';lastFallback=now;}
-    requestAnimationFrame(fallbackFrame);
-  }
+// ------------------------------------------------------------------ WebGPU初期化とモバイル用描画
+function start2DFallback(reason) {
+// WebGPUが使えない端末向け簡易宇宙表示
+const fallbackCanvas = $('c'), fallbackCtx = fallbackCanvas.getContext('2d');
+if (!fallbackCtx) { fatal('この端末では宇宙描画を開始できません。'); return; }
+$('era').textContent = '簡易2D表示（GPU機能制限）';
+$('age').textContent = '宇宙の初期状態';
+$('zv').textContent = '—'; $('tv').textContent = '—'; $('av').textContent = '—'; $('mode').textContent = '2D簡易描画';
+$('fatalMsg').innerHTML = 'WebGPU非対応のため、iPhone向け簡易2D表示で起動しました。';
+const stars = Array.from({length:650}, (_,i)=>({x:Math.random(),y:Math.random(),r:Math.random()*1.5+.2,p:Math.random()*6.28}));
+let start=performance.now(), lastFallback=0;
+function fallbackFrame(now){
+  const w=fallbackCanvas.clientWidth,h=fallbackCanvas.clientHeight,dpr=Math.min(devicePixelRatio||1,2);
+  if(fallbackCanvas.width!==Math.floor(w*dpr)||fallbackCanvas.height!==Math.floor(h*dpr)){fallbackCanvas.width=Math.floor(w*dpr);fallbackCanvas.height=Math.floor(h*dpr);}
+  fallbackCtx.setTransform(dpr,0,0,dpr,0,0);fallbackCtx.fillStyle='#02030a';fallbackCtx.fillRect(0,0,w,h);
+  const t=(now-start)/1000, cx=w/2,cy=h/2, expansion=(t%18)/18;
+  for(const q of stars){const rr=(Math.max(w,h)*.04+Math.max(w,h)*.7*((q.x+expansion)%1));const a=.25+.65*(.5+.5*Math.sin(t+q.p));fallbackCtx.fillStyle='rgba(170,200,255,'+a+')';fallbackCtx.beginPath();fallbackCtx.arc(cx+Math.cos(q.p*17)*rr,cy+Math.sin(q.p*13)*rr,q.r,0,Math.PI*2);fallbackCtx.fill();}
+  const glow=fallbackCtx.createRadialGradient(cx,cy,0,cx,cy,Math.min(w,h)*.35);glow.addColorStop(0,'rgba(90,130,255,.16)');glow.addColorStop(1,'rgba(0,0,0,0)');
+  fallbackCtx.fillStyle=glow;fallbackCtx.fillRect(0,0,w,h);
+  if(now-lastFallback>500){$('age').textContent='簡易宇宙表示';lastFallback=now;}
   requestAnimationFrame(fallbackFrame);
-  return;
 }
-const adapter = await Promise.race([navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }), new Promise((_, reject) => setTimeout(() => reject(new Error('GPUアダプターの応答がありません（8秒）')), 8000))]).catch((e) => { fatal('WebGPUの起動に失敗しました。<br>' + e.message + '<br><br>この端末・ブラウザーでは宇宙描画を開始できません。PC版ChromeまたはEdgeで開いてください。'); return null; });
-if (!adapter) return;
-const device = await Promise.race([adapter.requestDevice(), new Promise((_, reject) => setTimeout(() => reject(new Error('GPUデバイスの応答がありません（8秒）')), 8000))]).catch((e) => { fatal('GPUデバイスを作成できませんでした。<br>' + e.message + '<br><br>PC版ChromeまたはEdgeで開いてください。'); return null; });
-if (!device) return;
-device.lost.then((info) => fatal('GPUとの接続が失われました: ' + info.message + '<br>ページを再読み込みしてください。'));
-device.addEventListener('uncapturederror', (e) => { console.error(e.error.message); toast('GPUエラー: ' + e.error.message.slice(0, 80), 5000); });
+requestAnimationFrame(fallbackFrame);
+return;
+}
+if (!navigator.gpu) { start2DFallback('WebGPU非対応'); return; }
+const adapter = await navigator.gpu.requestAdapter({powerPreference:'high-performance'}).catch(()=>null);
+if (!adapter) { start2DFallback('GPUアダプター取得失敗'); return; }
+const device = await adapter.requestDevice().catch(()=>null);
+if (!device) { start2DFallback('GPUデバイス作成失敗'); return; }
+device.lost.then((info)=>fatal('GPUとの接続が失われました: '+info.message+'<br>ページを再読み込みしてください。'));
+device.addEventListener('uncapturederror',(e)=>{console.error(e.error.message);toast('GPUエラー: '+e.error.message.slice(0,80),5000);});
 
 const canvas = $('c');
 const ctx = canvas.getContext('webgpu');
