@@ -1053,7 +1053,8 @@ $('bLife').onclick = async () => {
   if (st.t < 9) { st.seek = cosmo.tNow; setDir(0); toast('宇宙が若すぎます。現在へ移動します。着いたらもう一度 🌱 を押してください', 5000); return; }
   toast('生命のいる銀河を探しています…', 2500);
   const halos = await findHalos(), tNow = st.t;
-  const spiralHalos = halos.filter((h) => Astro.galaxyType(h.Mh) === 'spiral');\n  const sp = spiralHalos[Math.floor(Math.random() * spiralHalos.length)] || halos[Math.floor(Math.random() * halos.length)];
+  const spiralHalos = halos.filter((h) => Astro.galaxyType(h.Mh) === 'spiral');
+  const sp = spiralHalos[Math.floor(Math.random() * spiralHalos.length)] || halos[Math.floor(Math.random() * halos.length)];
   if (!sp) return;
   clearHaloMarks();
   enterScene(() => { scenes.enterGalaxy({ Mh: sp.Mh, rho: sp.rho, seed: sp.seed, tNow }); setTimeout(() => { paintLife([], false, 0); scenes.scanLife(paintLife); }, 300); });
