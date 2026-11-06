@@ -1286,7 +1286,7 @@ window.addEventListener('keydown', (e) => { if (e.key === 'h' && !/INPUT|TEXTARE
 
 // ------------------------------------------------------------------ 描画
 // 地表・天体の画面は重いので、描画の細かさを自動で調整する(速度が足りないと下げ、余裕があると上げる)
-let rScale = 1, ema = 0.017, scaleN = 0;
+let rScale = 0.55, ema = 0.017, scaleN = 0;
 function adaptScale(dtReal) {
   const heavy = scenes && (scenes.kind === 'surface' || scenes.kind === 'object');
   if (!heavy) { ema = 0.017; scaleN = 0; return; }
@@ -1296,7 +1296,7 @@ function adaptScale(dtReal) {
 }
 function resize() {
   const heavy = scenes && (scenes.kind === 'surface' || scenes.kind === 'object');
-  const dpr = Math.min(window.devicePixelRatio || 1, 2) * (heavy ? (coarse ? Math.min(rScale, 0.7) : rScale) : 1);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2) * (heavy ? (coarse ? Math.min(rScale, 0.38) : rScale) : 1);
   const w = Math.max(1, Math.floor(canvas.clientWidth * dpr)), h = Math.max(1, Math.floor(canvas.clientHeight * dpr));
   if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
   return dpr;
