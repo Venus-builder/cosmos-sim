@@ -17,6 +17,9 @@
     const E2 = (a) => Or / (a * a * a * a) + Om / (a * a * a) + OL;
     const H = (a) => H0 * Math.sqrt(E2(a));
 
+    const zRecombination = 1100, zEquality = 3400;
+    const aRecombination = 1 / (1 + zRecombination), aEquality = 1 / (1 + zEquality);
+    const rhoRatioMatterRadiation = (a) => Om * a / Or;
     // ---- t(a) 表(ln a 等間隔) ----
     const LN0 = Math.log(1e-10), LN1 = Math.log(1e30), DL = 0.002;
     const n = Math.round((LN1 - LN0) / DL) + 1;
@@ -121,6 +124,9 @@
       H, tOfA, aOfT, lnAOfT, TdS, D, f: fGrowth, lum,
       zOfA: (a) => 1 / a - 1,
       TOfA: (a) => T0 / a,
+      cmbAtRedshift: (z) => T0 * (1 + z), rhoRatioMatterRadiation,
+      aRecombination, aEquality, zRecombination, zEquality,
+      tRecombination: tOfA(aRecombination), tEquality: tOfA(aEquality),
       tMin: tArr[0],
       tNow: tOfA(1),
     };
