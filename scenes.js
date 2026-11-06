@@ -1427,7 +1427,7 @@ function create(env) {
       if (S.kind === 'galaxy') S.clock += dir * mult * 10 * dtReal;
       else if (S.kind === 'system') S.clock += dir * mult * 0.2 * dtReal;
       else { S.clock += dir * mult * 2 * dtReal; S.worldYears = Math.max(0, S.worldYears + dir * mult * 2 * dtReal / 8760); }
-      if (S.kind === 'surface' && S.eco && Math.abs(S.worldYears - (S.ecoLog || 0)) >= 1) { const delta = S.worldYears - (S.ecoLog || 0); S.eco.step(Math.min(1000, Math.abs(delta)), delta < 0); S.ecoLog = S.worldYears; }
+      if (S.kind === 'surface' && S.eco && Math.abs(S.worldYears - (S.ecoLog || 0)) >= 1) { const delta = S.worldYears - (S.ecoLog || 0); if (delta > 0) S.eco.run(Math.min(1000, delta)); S.ecoLog = S.worldYears; }
     }
     const W = canvas.clientWidth, H = canvas.clientHeight;
     const enc = device.createCommandEncoder();
