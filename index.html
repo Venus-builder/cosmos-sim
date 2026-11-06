@@ -132,7 +132,7 @@
 
 <details id="opts" class="panel" open>
   <summary>設定</summary>
-  <div style="margin:6px 0 10px;color:#9fb4ff;font-size:13px;font-weight:bold">アプリ バージョン：v36</div><details style="font-size:12px;margin-bottom:8px"><summary>変更履歴</summary><div>v30：生命の起源を化学反応から確率的に開始し、環境依存の生物多様化と地表滞在中の文明自動進行を追加。<br>v31：知的生命の種族名と生命起源の反応経路を地表情報に表示。<br>v32：地表時間を宇宙共通の再生・逆再生・速度操作に接続し、生態系の時間進行を連動。<br>v33：文明初期化処理に混入した改行文字を修正し、JavaScript構文エラーを解消。<br>v34：地表生態系の二重進行を解消し、文明の進行を地表世界時間に同期。文明パネルから新規世界を作る操作を廃止。<br>v35：宇宙・地表の星の密度と輝度、銀河帯のコントラストを強化。<br>v36：惑星ごとに生態系を保存して再訪時に復元し、生態系の時間遅れを実際に進んだ年数で補正。</div></details>
+  <div style="margin:6px 0 10px;color:#9fb4ff;font-size:13px;font-weight:bold">アプリ バージョン：v37</div><details style="font-size:12px;margin-bottom:8px"><summary>変更履歴</summary><div>v30：生命の起源を化学反応から確率的に開始し、環境依存の生物多様化と地表滞在中の文明自動進行を追加。<br>v31：知的生命の種族名と生命起源の反応経路を地表情報に表示。<br>v32：地表時間を宇宙共通の再生・逆再生・速度操作に接続し、生態系の時間進行を連動。<br>v33：文明初期化処理に混入した改行文字を修正し、JavaScript構文エラーを解消。<br>v34：地表生態系の二重進行を解消し、文明の進行を地表世界時間に同期。文明パネルから新規世界を作る操作を廃止。<br>v35：宇宙・地表の星の密度と輝度、銀河帯のコントラストを強化。<br>v36：惑星ごとに生態系を保存して再訪時に復元し、生態系の時間遅れを実際に進んだ年数で補正。<br>v37：時間倍率を最大10億倍まで拡張し、高速時間のプリセットを追加。</div></details>
   <label>粒子数
     <select id="np">
       <option value="48">11万 (48³)</option>
@@ -174,7 +174,7 @@
     <button id="bRev" title="逆再生">◀<span class="lbl"> 逆再生</span></button>
     <button id="bPause" title="一時停止">⏸</button>
     <button id="bPlay" title="再生">▶<span class="lbl"> 再生</span></button>
-    <input type="range" id="speed" min="-2" max="5" step="0.05" value="0" title="倍速(対数)">
+    <input type="range" id="speed" min="-2" max="9" step="0.05" value="0" title="倍速(対数)">
     <span id="speedLbl"></span>
     <span id="presets" class="row">
     <button class="small" data-sp="0">×1</button>
@@ -182,6 +182,11 @@
     <button class="small" data-sp="2">×100</button>
     <button class="small" data-sp="3">×1000</button>
     <button class="small" data-sp="4">×1万</button>
+    <button class="small" data-sp="5">×10万</button>
+    <button class="small" data-sp="6">×100万</button>
+    <button class="small" data-sp="7">×1000万</button>
+    <button class="small" data-sp="8">×1億</button>
+    <button class="small" data-sp="9">×10億</button>
     </span>
   </div>
   <input type="range" id="tl" min="0" max="1000" step="1" value="0" title="時間軸(ドラッグでジャンプ)">
@@ -230,7 +235,7 @@
 <div id="toast"></div>
 <div id="fatal"><div id="fatalMsg"></div></div>
 
-<script src="cosmology.js?v=36"></script>
+<script src="cosmology.js?v=37"></script>
 <script src="astro.js?v=35"></script>
 <script src="life.js?v=35"></script>
 <script src="civ.js?v=35"></script>
