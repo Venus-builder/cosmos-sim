@@ -132,8 +132,8 @@ fn fbm3(p: vec3f, oct: i32) -> f32 {
 fn starfield(d: vec3f) -> vec3f {
   let q = d * 150.0; let id = floor(q); let f = fract(q) - 0.5;
   let h = hash31(id);
-  let s = step(0.988, h) * exp(-dot(f, f) * 70.0) * (0.4 + hash31(id + 7.0));
-  return vec3f(s) * vec3f(0.9, 0.95, 1.0);
+  let s = step(0.975, h) * exp(-dot(f, f) * 70.0) * (0.4 + hash31(id + 7.0));
+  return vec3f(s) * vec3f(2.2, 2.35, 2.8);
 }
 @fragment fn fs(i: PO) -> @location(0) vec4f {
   let asp = u.right.w; let tn = 0.42;
@@ -248,7 +248,7 @@ fn fbm3(p: vec3f, oct: i32) -> f32 {
 fn starfield(d: vec3f) -> vec3f {
   let q = d * 150.0; let id = floor(q); let f = fract(q) - 0.5;
   let h = hash31(id);
-  let s = step(0.985, h) * exp(-dot(f, f) * 70.0) * (0.4 + hash31(id + 7.0));
+  let s = step(0.975, h) * exp(-dot(f, f) * 70.0) * (0.4 + hash31(id + 7.0));
   return vec3f(s) * vec3f(0.9, 0.95, 1.0);
 }
 // xz: 着陸点からの東・北方向のずれ[km]。大域の地形値(惑星全体の見た目と同じ式)
@@ -608,9 +608,9 @@ fn starfield(d: vec3f) -> vec3f {
   let q = d * 170.0; let id = floor(q); let f = fract(q) - 0.5; let h = hash31(id);
   c += vec3f(step(0.985, h) * exp(-dot(f, f) * 60.0) * (0.35 + hash31(id + 7.0)));
   let q2 = d * 60.0; let id2 = floor(q2); let f2 = fract(q2) - 0.5; let h2 = hash31(id2 + 3.0);
-  c += vec3f(1.0, 0.85, 0.7) * step(0.993, h2) * exp(-dot(f2, f2) * 40.0) * 0.8;
+  c += vec3f(1.0, 0.85, 0.7) * step(0.985, h2) * exp(-dot(f2, f2) * 40.0) * 0.8;
   let band = exp(-pow(d.y * 3.0 + 0.2 * sin(d.x * 2.0), 2.0)) * (0.5 + fbm3(d * 4.0, 4));
-  c += vec3f(0.08, 0.09, 0.14) * band * 0.7;
+  c += vec3f(0.12, 0.14, 0.22) * band * 1.15;
   return c;
 }
 fn bbCol(T: f32) -> vec3f {
