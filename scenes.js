@@ -947,13 +947,22 @@ function create(env) {
     if (!g || !Number.isInteger(i) || i < 0 || i >= g.n || !Number.isInteger(k) || k < 0) {
       env.toast('生命のいる惑星データが不正です。もう一度生命探索してください'); return;
     }
+    // 遷移開始時点で探索を停止。探索結果の再描画が遷移中に割り込むのを防ぐ。
+    S.scanTok = null;
     clearLabels();
     fade(() => {
-      // 生命一覧の恒星番号から恒星系を再生成し、惑星番号を確認してから遷移
-      enterStarSystem(i);
-      if (!S.sys || k >= S.sys.planets.length) {
-        S.stack = ['cosmos']; S.kind = 'galaxy'; addGalaxyLabels();
-        env.toast('対象の惑星が見つかりませんでした'); return;
+      // 一覧を作った時と同じ specOf() で恒星系を再生成する。
+      const sys = astro.makeSystem(specOf(i));
+      sys.gal = { type: g.type, r: g.A[i * 4] };
+      // 既存の銀河スタックを整理し、恒星系→惑星の順に確実に積む。
+      S.stack = ['cosmos'];
+      enterSystem(sys, 'galaxy');
+      if (!S.sys || !S.sys.planets[k] || S.sys.planets[k].type !== 'rock') {
+        S.stack = ['cosmos'];
+        S.kind = 'galaxy';
+        addGalaxyLabels();
+        env.toast('対象の惑星を再生成できませんでした。生命探索をやり直してください');
+        return;
       }
       enterPlanet(k);
     });
