@@ -125,7 +125,8 @@
 <button id="mobileConsoleBtn" type="button">開発ログ</button>
 <section id="mobileConsole" aria-label="開発コンソール"><div id="mcHead"><b>スマホ開発コンソール</b><button id="mcClear">消去</button><button id="mcClose">閉じる</button></div><div id="mcOut"></div></section>
 <script>
-(()=>{const panel=document.getElementById('mobileConsole'),out=document.getElementById('mcOut'),btn=document.getElementById('mobileConsoleBtn');let count=0;
+(()=>{const panel=document.getElementById('mobileConsole'),out=document.getElementById('mcOut'),btn=document.getElementById('mobileConsoleBtn');let count=0;if(!/[?&]debug/.test(location.search))btn.style.display='none'; // ふだんは隠す(?debug を付けると出る)
+
 function add(type,args){const line=document.createElement('div');line.className=type==='error'?'err':type==='warn'?'warn':'info';let msg;try{msg=Array.from(args).map(v=>typeof v==='string'?v:(v&&v.stack)||JSON.stringify(v)).join(' ')}catch(e){msg='[表示できない値]'}line.textContent='['+type+'] '+msg;out.appendChild(line);while(out.childNodes.length>250)out.removeChild(out.firstChild);out.scrollTop=out.scrollHeight;count++}
 btn.onclick=()=>panel.classList.toggle('open');document.getElementById('mcClose').onclick=()=>panel.classList.remove('open');document.getElementById('mcClear').onclick=()=>{out.textContent='';count=0};
 window.addEventListener('error',e=>add('error',[e.message,e.filename+':'+e.lineno+':'+e.colno]));window.addEventListener('unhandledrejection',e=>add('error',['未処理Promise拒否',e.reason]));
@@ -148,7 +149,7 @@ add('info',['コンソール起動。ページのエラーとconsole出力をこ
 
 <details id="opts" class="panel" open>
   <summary>設定</summary>
-  <div style="margin:6px 0 10px;color:#9fb4ff;font-size:13px;font-weight:bold">アプリ バージョン：v58</div>
+  <div style="margin:6px 0 10px;color:#9fb4ff;font-size:13px;font-weight:bold">アプリ バージョン：v59</div>
   <details style="font-size:12px;margin:6px 0"><summary>宇宙・物理モデルと限界</summary><div style="line-height:1.6;margin-top:6px">宇宙膨張はΛCDM近似（放射・物質・暗黒エネルギー）で計算。基準値は H₀=67.7 km/s/Mpc、Ωm=0.31、Ωr=9.0×10⁻⁵、ΩΛ=1−Ωm−Ωr。赤方偏移・CMB温度・線形成長率はこの背景宇宙から計算します。<br><br>注意：開始点は特異点そのものではなく、スケール因子 a=10⁻¹⁰ 付近です。インフレーション、量子重力、元素合成、詳細な再結合・ニュートリノ物理は未実装。銀河形成は粒子数・計算予算に制限された簡易N体モデルで、実観測の精密再現ではありません。地表・生命・文明も確立した科学モデルではなく、仮説・手続き生成です。<br><br>現実に近づけるには、物理過程を段階ごとに追加し、観測値との比較とテストを行います。</div></details><details style="font-size:12px;margin-bottom:8px"><summary>変更履歴</summary><div>v30：生命の起源を化学反応から確率的に開始し、環境依存の生物多様化と地表滞在中の文明自動進行を追加。<br>v31：知的生命の種族名と生命起源の反応経路を地表情報に表示。<br>v32：地表時間を宇宙共通の再生・逆再生・速度操作に接続し、生態系の時間進行を連動。<br>v33：文明初期化処理に混入した改行文字を修正し、JavaScript構文エラーを解消。<br>v34：地表生態系の二重進行を解消し、文明の進行を地表世界時間に同期。文明パネルから新規世界を作る操作を廃止。<br>v35：宇宙・地表の星の密度と輝度、銀河帯のコントラストを強化。<br>v36：惑星ごとに生態系を保存して再訪時に復元し、生態系の時間遅れを実際に進んだ年数で補正。<br>v37：時間倍率を最大10億倍まで拡張し、高速時間のプリセットを追加。<br>v38：惑星を移動しても文明の観察状態を同じ惑星ごとに保持。<br>v39：知能発達指標・遺伝情報の観察画面を追加。<br>v40：文明画面に国家・集団関係の試験表示を追加。<br>v41：国家段階の成立状況と社会組織能力を文明観察欄に表示。<br>v42：追加コードに混入した不正な改行表記を修正し、JavaScript構文と画面表示を正常化。<br>v43：遺伝情報画面を拡充し、32文字の仮想塩基列・複数形質指標・知能段階の一覧を惑星ごとに表示。<br>v44：文明パネルを人口・社会組織能力・到達済み社会技術の観察表示に変更。外交・国境など未実装機能を実在表示のように扱わないよう明記。<br>v45：起動時の時間倍率を×100に変更し、宇宙初期の膨張・温度変化が見えるよう自動再生を改善。物理モデルの採用値と未実装範囲を明示。<br>v46：宇宙の時代表示を放射優勢・物質優勢・再結合（晴れ上がり）の境界に合わせ、等時刻・温度補助量を追加。<br>v47：WebGPU起動待ちにタイムアウトと原因表示を追加。<br>v48：WebGPU非対応端末向けに簡易2D宇宙描画を追加。<br>v51：WebGPUが部分対応の端末でも描画画面の取得・設定失敗時に2Dへ切り替え。<br>v54：地表の絶滅種を生物描画から除外し、文明初期の集落・建物を道路段階から出現しやすく調整。<br>v47：WebGPUの起動待ちが無期限になる問題にタイムアウトと原因表示を追加。</div></details>
   <label>粒子数
     <select id="np">
@@ -226,7 +227,7 @@ add('info',['コンソール起動。ページのエラーとconsole出力をこ
 <div id="ecoP" class="panel" style="display:none">
   <div class="row" style="justify-content:space-between"><b>🧬 生態系(群れ・進化・絶滅)</b><button class="small" id="ecoX">✕</button></div>
   <div style="color:var(--dim);font-size:11px">この土地(0.6km四方)の動物を一匹ずつ動かしています。餌を食べ、逃げ、追い、子を残し、遺伝子が少しずつ変わります。進化が見えるよう変異は誇張しています。確率モデル(仮説)です。</div>
-  <div class="row"><select id="ecoRate"><option value="0">停止</option><option value="2">2年/秒</option><option value="10" selected>10年/秒</option><option value="50">50年/秒</option><option value="200">200年/秒</option></select>
+  <div class="row"><select id="ecoRate" style="display:none"><option value="10" selected>10</option></select><span style="color:var(--dim)">進む速さは下の時間倍率で決まります(進化を見るには ×1万以上)</span>
     <button class="small" id="evA">☄ 隕石</button><button class="small" id="evI">❄ 氷期</button><button class="small" id="evV">🌋 噴火</button></div>
   <div id="ecoBody"></div>
 </div>
@@ -254,13 +255,13 @@ add('info',['コンソール起動。ページのエラーとconsole出力をこ
 <div id="toast"></div>
 <div id="fatal"><div id="fatalMsg"></div></div>
 
-<script src="cosmology.js?v=58"></script>
-<script src="astro.js?v=58"></script>
-<script src="life.js?v=58"></script>
-<script src="civ.js?v=58"></script>
-<script src="eco.js?v=58"></script>
-<script src="scenario.js?v=58"></script>
-<script src="scenes.js?v=58"></script>
+<script src="cosmology.js?v=59"></script>
+<script src="astro.js?v=59"></script>
+<script src="life.js?v=59"></script>
+<script src="civ.js?v=59"></script>
+<script src="eco.js?v=59"></script>
+<script src="scenario.js?v=59"></script>
+<script src="scenes.js?v=59"></script>
 <script>
 (async function () {
 'use strict';
@@ -1100,7 +1101,13 @@ $('bDNA').onclick = () => {
   const stage = Life.STAGE_JP[bio.stage] || '未確認';
   const stages = ['化学反応','膜を持つ原始細胞','単細胞生物','光合成・代謝の多様化','真核細胞','多細胞化','複雑な生態系','神経系','学習・行動','知的生命'];
   const stageIndex = Math.max(0,Math.min(stages.length-1,Number(bio.stage)||0));
-  body.innerHTML = '<p><b>対象：</b>'+((p&&p.name)||'惑星')+' / '+stage+'</p>'+
+  let real = '';
+  const e = scenes.eco && scenes.eco();
+  if (e) {
+    const sp = e.list().filter((x) => x.ext === null && x.count > 0).sort((x, y) => y.count - x.count).slice(0, 12);
+    real = '<p><b>この土地の動物の遺伝子(実際に子へ伝わり、変異する値)</b></p>' + sp.map((x) => '<div>' + x.name + ' ' + x.count + '匹<br><span style="color:var(--dim)">大きさ' + x.size.toFixed(2) + ' 速さ' + x.speed.toFixed(2) + ' 肉食度' + x.diet.toFixed(2) + '</span></div>').join('') + '<p style="color:var(--dim)">系統・種分化・絶滅は🧬生態系パネルで見られます。下は惑星シードから作った参考の仮想値です。</p><hr>';
+  }
+  body.innerHTML = real + '<p><b>対象：</b>'+((p&&p.name)||'惑星')+' / '+stage+'</p>'+
     '<p><b>系統識別子：</b>'+seed.toString(16).toUpperCase()+'</p>'+
     '<p><b>仮想塩基列（32文字）</b><br><code style="word-break:break-all">'+markers+'</code></p>'+
     '<p><b>遺伝形質モデル（シード由来の参考値）</b></p>'+
@@ -1260,7 +1267,7 @@ function paintCiv(force) {
   civPaint = performance.now();
   if ($('civ').style.display === 'none') return;
   const body = $('civBody');
-  if (!civ) { body.innerHTML = '<div style="margin-top:6px">「新しい世界で始める」を押すと、エネルギー・材料・情報など7種類の能力をもつ技術を、個人が試行錯誤で作っていく様子を観察できます。始めるたびに別の世界になります。</div>'; return; }
+  if (!civ) { body.innerHTML = '<div style="margin-top:6px">地表に降りると、その惑星の知的生命の集団が自動で始まります。エネルギー・材料・情報など7種類の能力をもつ技術を、個人が試行錯誤で作っていく様子を観察できます(時間の進みは地表の時間倍率に同期)。</div>'; return; }
   const s = civ.summary(), caps = s.caps;
   const state = civ.state || {}; const nationList = state.nations || []; const relations = state.relations || []; 
   const bars = Civ.DIM_JP.map((n, i) => '<div><span>' + n + '</span><span style="background:rgba(127,166,255,.12);border-radius:3px"><i style="width:' + Math.min(100, caps[i] / 16 * 100).toFixed(1) + '%"></i></span><span style="text-align:right">' + caps[i].toFixed(1) + '</span></div>').join('');

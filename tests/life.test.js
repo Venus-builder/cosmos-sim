@@ -51,10 +51,10 @@ console.log('life: all tests passed (Earth window ends at %s Gyr)', env.windowEn
   const sol2 = A.solarSystem(), ea = sol2.planets.find((x) => x.name === '地球');
   ea.env = Life.environment(ea, sol2.star, 4.6);
   const bE = Life.biosphere(ea, sol2.star, 4.6, ea.env, 1);
-  assert.ok(bE.real && bE.intelligent && bE.stage === 8, '地球には知的生命がいる(実際)');
+  assert.ok(bE.real && bE.intelligent && bE.stage === 9, '地球には知的生命がいる(実際)');
   const spE = Life.species(ea, sol2.star, bE, 5);
   assert.ok(spE.some((x) => x.kind === 4) && spE.some((x) => x.kind === 3), '地球の生き物に人と植物がいる');
-  const dist = new Array(9).fill(0); let tested = 0;
+  const dist = new Array(10).fill(0); let tested = 0;
   for (let i = 0; i < 300; i++) {
     const sys = A.makeSystem({ seed: 1000 + i, mass: 1, Z: 1, age: 4.5 });
     for (const p of sys.planets) {
@@ -67,6 +67,6 @@ console.log('life: all tests passed (Earth window ends at %s Gyr)', env.windowEn
     }
   }
   assert.ok(tested > 100, 'テスト対象の惑星が十分ある');
-  assert.ok(dist[0] > dist[8], '知的生命は稀(生命なしの惑星のほうが多い): ' + dist.join(','));
+  assert.ok(dist[0] > dist[9], '知的生命は稀(生命なしの惑星のほうが多い): ' + dist.join(','));
   console.log('life(biosphere): stages', dist.join(','), 'of', tested);
 }

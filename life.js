@@ -82,7 +82,7 @@
     return null;
   }
   function biosphere(p, star, ageNow, env, seed) {
-    if (p.life && p.real !== false && p.name === '地球') return { stage: 8, real: true, intelligent: true, extinct: false, times: [], ageNow };
+    if (p.life && p.real !== false && p.name === '地球') return { stage: 9, real: true, intelligent: true, extinct: false, times: [], ageNow };
     if (p.type !== 'rock' || !env || !env.windows.length) return { stage: 0, extinct: false, times: [], ageNow, intelligent: false };
     const r = mb(Math.floor(seed * 1000003) ^ 0x9e3779b1);
     // 「生命を配置」するのではなく、海・温度・化学材料がそろった時だけ起源イベントを発生させる。
@@ -99,7 +99,8 @@
     const span = brainAt !== null && intellectAt !== null ? Math.max(1e-6, intellectAt - brainAt) : 1;
     const cognitiveAge = brainAt === null ? 0 : Math.max(0, ageNow - brainAt);
     const intelligence = brainAt === null ? 0 : Math.max(0, Math.min(1, cognitiveAge / span));
-    return { stage: extinct ? 0 : stage, peak: stage, extinct, times, origin, raceName, ageNow, intelligence, intelligent: !extinct && stage >= 9 };
+    // 段階は 0〜9 に収める(9=知的生命。10番目の時刻は、知能がじゅうぶん育つまでの目安として intelligence の計算にだけ使う)
+    return { stage: extinct ? 0 : Math.min(9, stage), peak: Math.min(9, stage), extinct, times, origin, raceName, ageNow, intelligence, intelligent: !extinct && stage >= 9 };
   }
   const SYL2 = ['ア', 'イ', 'ウ', 'エ', 'オ', 'カ', 'キ', 'ク', 'ケ', 'コ', 'サ', 'シ', 'ス', 'セ', 'タ', 'チ', 'テ', 'ト', 'ナ', 'ニ', 'ネ', 'ノ', 'ハ', 'ヒ', 'フ', 'ホ', 'マ', 'ミ', 'ム', 'メ', 'モ', 'ヤ', 'ユ', 'ヨ', 'ラ', 'リ', 'ル', 'ロ'];
   // 生き物(種)を手続き生成する。実在の生物の再現ではなく、惑星の条件と乱数から作る。
@@ -137,8 +138,8 @@
         size: base * (0.5 + r() * 1.5) * (kind === 3 ? 1 : sz), legs, plan, col, col2, speed: 0.3 + r() * 1.2, abundance: 0.4 + r() });
     } };
     if (stage >= 3) add(2, '微生物・水中生物', 'sea', Math.min(80, 8 + Math.floor(r() * (stage * stage * 3))), 0.00008);
-    if (stage >= 5) add(2, '水中の生物', 'sea', Math.min(80, 20 + Math.floor(r() * stage * 8)), 0.0006);
-    if (stage >= 6) {
+    if (stage >= 6) add(2, '水中の生物', 'sea', Math.min(80, 20 + Math.floor(r() * stage * 8)), 0.0006);
+    if (stage >= 7) {
       const diversity = Math.min(80, 12 + Math.floor(r() * (stage * 9)));
       add(3, '光合成生物・植物', 'land', diversity, 0.004);
       add(0, '陸上動物・節足動物など', 'land', Math.min(80, diversity + Math.floor(r() * 20)), 0.0011);

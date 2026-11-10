@@ -986,7 +986,7 @@ function create(env) {
               if (p.type !== 'rock') return;
               const ev = env.life.environment(p, sys.star, sys.star.age);
               const bio = env.life.biosphere(p, sys.star, sys.star.age, ev, p.seed || 1);
-              if (bio.stage >= 6 && (!best || bio.stage > best.stage)) best = { i: idx, k, name: p.name, stage: bio.stage, intelligent: !!bio.intelligent };
+              if (bio.stage >= 7 && (!best || bio.stage > best.stage)) best = { i: idx, k, name: p.name, stage: bio.stage, intelligent: !!bio.intelligent };
             });
             if (best) found.push(best);
           }
@@ -1091,7 +1091,7 @@ function create(env) {
 
   // ------------------------------------------------------------ 惑星
   const vegOf = (p) => p.vegCol || (p.vegCol = env.life.plantColor(p, S.sys.star));
-  const greenOf = (p) => (p.life || (p.bio && p.bio.stage >= 6)) ? 1 : 0;
+  const greenOf = (p) => (p.life || (p.bio && p.bio.stage >= 7)) ? 1 : 0;
   const bioText = (p) => {
     const b = p.bio, SJ = env.life.STAGE_JP;
     if (!b) return p.type === 'rock' ? '—' : '考えない(ガス・氷の巨大惑星)';
@@ -1212,7 +1212,7 @@ function create(env) {
     const savedEco = S.ecoWorlds.get(S.ecoKey);
     if (savedEco) { S.fauna = savedEco.fauna; S.eco = savedEco.eco; S.ecoLog = savedEco.ecoLog; }
     else {
-      S.fauna = p.bio && p.bio.stage >= 5 ? env.life.species(p, S.sys.star, p.bio, (p.seed || 1) + 0.5) : [];
+      S.fauna = p.bio && p.bio.stage >= 3 ? env.life.species(p, S.sys.star, p.bio, (p.seed || 1) + 0.5) : [];
       makeEco(p, S.sf);
       if (S.eco) S.ecoWorlds.set(S.ecoKey, { fauna: S.fauna, eco: S.eco, ecoLog: S.ecoLog });
     }
@@ -1230,9 +1230,9 @@ function create(env) {
   }
   function buildCreatures(sf, tsec) {
     const p = S.pl, F = S.fauna || [], by = (k) => F.filter((x) => x.kind === k), data = new Float32Array(MAXC * 16), list = [];
+    const eco = S.eco, pfac = eco ? 0.25 + 0.75 * Math.min(1, eco.plantFrac()) : 1;
     const plants = by(3), animals = eco ? by(0).filter(x => eco.species.some(q => q.vis.name === x.name && q.ext === null && q.count > 0)) : by(0), birds = eco ? by(1).filter(x => eco.species.some(q => q.vis.name === x.name && q.ext === null && q.count > 0)) : by(1), fish = by(2), people = by(4), lvl = S.civNow || 0;
     const cell = 0.04, R = 7, seed = Math.floor((p.seed || 1) * 1000) | 0;
-    const eco = S.eco, pfac = eco ? 0.25 + 0.75 * Math.min(1, eco.plantFrac()) : 1;
     const ci0 = Math.floor(sf.wx / cell), cj0 = Math.floor(sf.wz / cell);
     const mk = (sp, k, ci, cj) => ({ sp, key: ((ci * 73856093) ^ (cj * 19349663) ^ (k * 83492791)) | 0 });
     const add = (kind, x, z, size, sp, style, phase, head, hab, alt, wr, c1, c2, m) => (x - sf.wx) ** 2 + (z - sf.wz) ** 2 > 1.5e-4 && list.push({ m, d2: (x - sf.wx) ** 2 + (z - sf.wz) ** 2, v: [x, z, size, kind, c1[0], c1[1], c1[2], style, c2[0], c2[1], c2[2], phase, head, hab, alt, wr] });
