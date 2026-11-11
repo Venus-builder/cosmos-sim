@@ -119,12 +119,39 @@
       return lumV[lo] * (1 - f) + lumV[hi] * f;
     }
 
+    // ---- 初期宇宙の物理量(標準的な式による近似) ----
+    // 温度は T = T0/a。中性子と陽子の比は、約0.8MeVまでは熱平衡(n/p = exp(-Δm/kT)、Δm=1.293MeV)、
+    // それ以降は凍結して中性子が壊れ(寿命880秒)、重水素のボトルネックが開く約0.07MeVで元素合成が起きる。
+    // 水素の電離度は Saha の式(再結合の厳密な計算ではなく、起こる時期の目安)。
+    const KEV = 8.617333e-5; // eV/K
+    const NB0 = 0.2523 * (0.0224 / 0.0224); // 現在のバリオン数密度 [m^-3](Ωb h²=0.0224)
+    function plasma(t) {
+      const a = aOfT(t), TK = T0 / a, TMeV = TK * KEV * 1e-6, tSec = t * 3.15576e16;
+      let phase = 'クォーク・グルーオン〜ハドロンの時代', xn = null;
+      const np = (T, ts) => (T > 0.8 ? Math.exp(-1.293 / T) : (1 / 6) * Math.exp(-Math.max(0, ts - 1.0) / 880));
+      let Yp = null;
+      if (TMeV < 100) phase = 'ニュートリノが分離する前の熱い宇宙(電子・陽電子・光)';
+      if (TMeV < 0.8) phase = '中性子と陽子の比が凍結(約1/6)し、中性子が壊れていく';
+      if (TMeV < 0.09) { const x = np(0.07, 180); Yp = 2 * x / (1 + x); phase = 'ビッグバン元素合成が終わり、ヘリウム4が質量の約25%'; }
+      const x0 = np(Math.max(TMeV, 0.07), Math.min(tSec, 180));
+      xn = x0;
+      // Saha: x²/(1−x) = S, S = (1/n_b)(m_e kT / 2πħ²)^{3/2} exp(−13.6eV/kT)
+      let xe = null;
+      if (TK < 20000 && TK > 500) {
+        const nb = NB0 / (a * a * a), kT = TK * 1.380649e-23, me = 9.109e-31, hb = 1.0546e-34;
+        const S = Math.pow(me * kT / (2 * Math.PI * hb * hb), 1.5) / nb * Math.exp(-13.6 / (TK * KEV));
+        xe = S > 1e8 ? 1 : (-S + Math.sqrt(S * S + 4 * S)) / 2;
+        xe = Math.min(1, Math.max(0, xe));
+      }
+      return { TK, TMeV, np: xn, Yp, xe, phase };
+    }
+
     return {
       h, Om, Or, OL, H0, TMAX,
       H, tOfA, aOfT, lnAOfT, TdS, D, f: fGrowth, lum,
       zOfA: (a) => 1 / a - 1,
       TOfA: (a) => T0 / a,
-      cmbAtRedshift: (z) => T0 * (1 + z), rhoRatioMatterRadiation,
+      plasma, cmbAtRedshift: (z) => T0 * (1 + z), rhoRatioMatterRadiation,
       aRecombination, aEquality, zRecombination, zEquality,
       tRecombination: tOfA(aRecombination), tEquality: tOfA(aEquality),
       tMin: tArr[0],

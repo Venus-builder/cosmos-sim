@@ -84,7 +84,7 @@
     function newAgent(mother, father, age) {
       const id = nextId++;
       const a = { id, name: nameOf(seed, 20000 + id), sex: rnd() < 0.5 ? 0 : 1, age: age || 0, born: Math.round(w.year - (age || 0)), arr: [], set: new Set(), curious: 0.4 + 1.2 * rnd(),
-        mother: mother ? mother.id : -1, father: father ? father.id : -1, partner: null, kids: [], inv: 0, log: [], alive: true, died: null };
+        mother: mother ? mother.id : -1, father: father ? father.id : -1, grp: mother ? mother.grp : 0, lineage: mother ? mother.lineage : id, partner: null, kids: [], inv: 0, log: [], alive: true, died: null };
       if (mother) { for (const k of mother.arr) if (rnd() < 0.7) learn(a, k); if (father) for (const k of father.arr) if (rnd() < 0.4) learn(a, k); }
       else startKnown.forEach((k) => learn(a, k));
       byId.set(id, a); return a;
@@ -174,11 +174,70 @@
       if (w.caps[I] >= 1.2 && !w.recRetro) { w.recRetro = true; for (const x of items) if (x.alive && !x.rec && rnd() < 0.6) { x.rec = true; lib.push(x.id); } }
     }
 
+    // ---- 集団・国家・交易・戦争(個人が所属し、集団どうしの関係が個人の知識と生死に影響する)
+    const groups = [{ id: 0, name: nameOf(seed, 30000) + '族', born: 0, alive: true, leader: null }];
+    const rel = new Map(); // 'a-b' → { trade, hostility, war }
+    const relOf = (a, b) => { const k = a < b ? a + '-' + b : b + '-' + a; let r = rel.get(k); if (!r) { r = { a: Math.min(a, b), b: Math.max(a, b), trade: 0.1, hostility: 0.1, war: false }; rel.set(k, r); } return r; };
+    const nameG = (id) => groups[id].name;
+    function societyStep(dt) {
+      const c = w.caps, cnt = new Map();
+      for (const a of agents) { let l = cnt.get(a.grp); if (!l) cnt.set(a.grp, l = []); l.push(a); }
+      // 分裂: 大きくなりすぎた集団は、血縁(系統)ごとに二つに分かれる
+      const capG = 90 + 220 * Math.min(3, Math.max(0, c[O]));
+      for (const [gid, mem] of Array.from(cnt)) {
+        if (mem.length <= capG) continue;
+        const moving = mem.filter((a) => u01(seed, 77 + groups.length, a.lineage) < 0.5);
+        if (moving.length < 20 || mem.length - moving.length < 20 || w.year - (groups[gid].lastSplit || -1e9) < 60) continue;
+        groups[gid].lastSplit = w.year;
+        const ng = { id: groups.length, name: nameOf(seed, 30000 + groups.length) + (c[O] > 2.2 ? '国' : '族'), born: w.year, alive: true, leader: null };
+        groups.push(ng);
+        for (const a of moving) a.grp = ng.id;
+        const r = relOf(gid, ng.id); r.trade = 0.3; r.hostility = 0.15;
+        w.log(w.year, 'society', '【分裂】' + nameG(gid) + ' から ' + ng.name + ' が分かれた(人口 ' + mem.length + ')');
+      }
+      const alive = groups.filter((g) => g.alive);
+      const size = new Map(); for (const a of agents) size.set(a.grp, (size.get(a.grp) || 0) + 1);
+      const crowd = w.pop / Math.max(1, w.Kcap);
+      for (let i = 0; i < alive.length; i++) for (let j = i + 1; j < alive.length; j++) {
+        const A = alive[i], B = alive[j], na = size.get(A.id) || 0, nb = size.get(B.id) || 0;
+        if (na < 6 || nb < 6) continue;
+        const r = relOf(A.id, B.id);
+        // 交易が増えると敵意が下がり、人が増えて資源が足りなくなると敵意が上がる
+        r.trade = Math.min(1, r.trade + 0.012 * dt * (0.3 + c[T]) * (1 - r.hostility));
+        r.hostility = Math.max(0, Math.min(1, r.hostility + 0.003 * dt * Math.max(0, crowd - 0.6) - 0.004 * dt * (0.3 + c[O]) * r.trade));
+        if (r.war) { r.war = false; r.hostility = Math.max(0.2, r.hostility * 0.6); }
+        // 交易: 知識を交換する
+        if (r.trade > 0.2 && rnd() < Math.min(0.9, r.trade * 0.12 * dt)) {
+          const ma = cnt.get(A.id), mb = cnt.get(B.id);
+          if (ma && mb) { const x = ma[Math.floor(rnd() * ma.length)], y = mb[Math.floor(rnd() * mb.length)]; if (y.arr.length) learn(x, y.arr[Math.floor(rnd() * y.arr.length)]); if (x.arr.length) learn(y, x.arr[Math.floor(rnd() * x.arr.length)]); }
+        }
+        // 戦争: 敵意が高く、武器(材料・エネルギー)が進むほど起こりやすい。組織力が高いと抑えられる
+        const pw = 1 - Math.exp(-dt * 0.012 * r.hostility * r.hostility * (1 + 0.25 * (c[M] + c[E])) / (1 + 0.6 * c[O] * r.trade));
+        if (rnd() < pw) {
+          r.war = true;
+          const Sa = na * (1 + 0.3 * c[M] + 0.3 * c[E]) * (0.8 + 0.4 * rnd()), Sb = nb * (1 + 0.3 * c[M] + 0.3 * c[E]) * (0.8 + 0.4 * rnd());
+          const win = Sa >= Sb ? A : B, lose = win === A ? B : A, fl = 0.05 + 0.15 * rnd(), fw = 0.02 + 0.08 * rnd();
+          let killed = 0;
+          for (let k = agents.length - 1; k >= 0 && agents.length > 8; k--) { const a = agents[k]; if (a.age < 16 || a.age > 50) continue; const p = a.grp === lose.id ? fl * (a.sex ? 0.3 : 1) : a.grp === win.id ? fw * (a.sex ? 0.3 : 1) : 0; if (p && rnd() < p) { kill(k, '戦争'); killed++; } }
+          const conquer = (size.get(lose.id) || 0) < 0.6 * (size.get(win.id) || 1) && rnd() < 0.45;
+          if (conquer) { for (const a of agents) if (a.grp === lose.id) a.grp = win.id; lose.alive = false; r.hostility = 0.1; w.log(w.year, 'society', '【戦争】' + nameG(win.id) + ' が ' + nameG(lose.id) + ' を征服・併合(死者 ' + killed + '人)'); }
+          else { r.hostility = 0.45; w.log(w.year, 'society', '【戦争】' + nameG(A.id) + ' と ' + nameG(B.id) + ' が衝突(死者 ' + killed + '人、勝ち: ' + nameG(win.id) + ')'); }
+        }
+      }
+      // 結婚は集団内が多く、一部は集団をまたぐ(婚姻でも知識が伝わる)。ここでは状態の記録だけ更新
+      for (const g of groups) if (g.alive && !(size.get(g.id) > 0)) g.alive = false;
+      w.state = {
+        nations: groups.filter((g) => g.alive).map((g) => { const m = (cnt.get(g.id) || []); const ld = m.reduce((b, a) => (a.kids.length + a.inv > (b ? b.kids.length + b.inv : -1) ? a : b), null); return { id: g.id, name: g.name, size: size.get(g.id) || 0, leader: ld ? ld.name : '—', born: g.born }; }),
+        relations: Array.from(rel.values()).filter((r) => groups[r.a].alive && groups[r.b].alive).map((r) => ({ a: nameG(r.a), b: nameG(r.b), trade: r.trade, hostility: r.hostility, kind: r.hostility > 0.45 ? '敵対' : r.trade > 0.55 ? '交易が盛ん' : '中立' })),
+      };
+    }
+    w.state = { nations: [], relations: [] };
+
     function step(dt) {
       if (w.ended) return;
       const c = w.caps;
       w.year += dt;
-      w.Kcap = Math.min(P.maxN, P.k0 * Math.exp(0.9 * c[L] + 0.5 * c[E] + 0.3 * c[T] + 0.3 * c[O] + 0.2 * c[M]));
+      w.Kcap = Math.min(P.maxN, P.k0 * (w.envK || 1) * Math.exp(0.9 * c[L] + 0.5 * c[E] + 0.3 * c[T] + 0.3 * c[O] + 0.2 * c[M])); // envK: 土地の実り(生態系の植物量)で変わる
       // 発明の試み(個人がそれぞれ、知っている技術を組み合わせて試す)
       const mult = 1 + 0.35 * c[I] + 0.15 * c[S] + 0.1 * c[O];
       const rate = P.attRate * (1 + (w.aliveN || 0) / 40) * mult * dt;
@@ -223,6 +282,7 @@
           agents.push(kid);
         }
       }
+      societyStep(dt);
       // 死亡(寿命は生命の力で伸びる。人が多すぎると食料が足りず死亡が増える)
       const life = 58 + 25 * (1 - Math.exp(-c[L] / 4)), crowd = 0.03 * Math.max(0, agents.length / w.Kcap - 1);
       for (let i = agents.length - 1; i >= 0; i--) {

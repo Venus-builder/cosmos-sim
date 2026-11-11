@@ -48,3 +48,16 @@ console.log('cosmology: all tests passed (age=%s Gyr, tRec=%s Myr)', c.tNow.toFi
   console.log('cosmology(far future): ok');
 }
 function Cosmology_create() { return require('../cosmology.js').create(); }
+
+// ---- 初期宇宙の物理量
+{
+  const C = require('../cosmology.js').create();
+  const early = C.plasma(1e-17 / 100);
+  assert.ok(early.TMeV > 10 && early.Yp === null, '非常に早い時期は元素合成の前');
+  const mid = C.plasma(2000 / 3.15576e16);
+  assert.ok(mid.Yp > 0.23 && mid.Yp < 0.27, 'ヘリウム4の質量比は約25%: ' + mid.Yp);
+  const rec = C.plasma(C.tRecombination), late = C.plasma(0.001), pre = C.plasma(2e-5);
+  assert.ok(pre.xe > rec.xe && rec.xe > late.xe, '電離度は時間とともに下がる');
+  assert.ok(late.xe < 0.01, '晴れ上がりのあとは中性');
+  console.log('cosmology(plasma): Yp=' + mid.Yp.toFixed(3) + ' xe(z=1100)=' + rec.xe.toFixed(3));
+}

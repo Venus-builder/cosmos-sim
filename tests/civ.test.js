@@ -24,3 +24,11 @@ console.log('civ: all tests passed (' + orders.size + ' distinct orders in 6 wor
   assert.strictEqual(w.pop, w.summary().pop, '人口=追跡中の個人の数');
   console.log('civ(individuals): ok pop=' + w.pop);
 }
+
+// ---- 集団・交易・戦争
+{
+  let splits = 0, wars = 0, trades = 0;
+  for (let sd = 1; sd <= 4; sd++) { const w = run(sd * 13, 20000); splits += w.timeline.filter((e) => /分裂/.test(e.text)).length; wars += w.timeline.filter((e) => /戦争/.test(e.text) && e.kind === 'society').length; trades += w.state.relations.filter((r) => r.trade > 0.3).length; assert.ok(w.state.nations.length >= 1, '国家(集団)がある'); }
+  assert.ok(splits > 0, '集団が分裂する: ' + splits);
+  console.log('civ(society): splits=' + splits + ' wars=' + wars + ' tradeLinks=' + trades);
+}

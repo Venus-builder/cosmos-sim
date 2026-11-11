@@ -143,13 +143,14 @@ add('info',['コンソール起動。ページのエラーとconsole出力をこ
     <dt>赤方偏移 z</dt><dd id="zv"></dd>
     <dt>温度(CMB)</dt><dd id="tv"></dd>
     <dt>宇宙の大きさ(現在=1)</dt><dd id="av"></dd>
+    <dt id="plk">初期宇宙の物質</dt><dd id="plv"></dd>
     <dt>計算</dt><dd id="mode"></dd>
   </dl>
 </div>
 
 <details id="opts" class="panel" open>
   <summary>設定</summary>
-  <div style="margin:6px 0 10px;color:#9fb4ff;font-size:13px;font-weight:bold">アプリ バージョン：v59</div>
+  <div style="margin:6px 0 10px;color:#9fb4ff;font-size:13px;font-weight:bold">アプリ バージョン：v62</div>
   <details style="font-size:12px;margin:6px 0"><summary>宇宙・物理モデルと限界</summary><div style="line-height:1.6;margin-top:6px">宇宙膨張はΛCDM近似（放射・物質・暗黒エネルギー）で計算。基準値は H₀=67.7 km/s/Mpc、Ωm=0.31、Ωr=9.0×10⁻⁵、ΩΛ=1−Ωm−Ωr。赤方偏移・CMB温度・線形成長率はこの背景宇宙から計算します。<br><br>注意：開始点は特異点そのものではなく、スケール因子 a=10⁻¹⁰ 付近です。インフレーション、量子重力、元素合成、詳細な再結合・ニュートリノ物理は未実装。銀河形成は粒子数・計算予算に制限された簡易N体モデルで、実観測の精密再現ではありません。地表・生命・文明も確立した科学モデルではなく、仮説・手続き生成です。<br><br>現実に近づけるには、物理過程を段階ごとに追加し、観測値との比較とテストを行います。</div></details><details style="font-size:12px;margin-bottom:8px"><summary>変更履歴</summary><div>v30：生命の起源を化学反応から確率的に開始し、環境依存の生物多様化と地表滞在中の文明自動進行を追加。<br>v31：知的生命の種族名と生命起源の反応経路を地表情報に表示。<br>v32：地表時間を宇宙共通の再生・逆再生・速度操作に接続し、生態系の時間進行を連動。<br>v33：文明初期化処理に混入した改行文字を修正し、JavaScript構文エラーを解消。<br>v34：地表生態系の二重進行を解消し、文明の進行を地表世界時間に同期。文明パネルから新規世界を作る操作を廃止。<br>v35：宇宙・地表の星の密度と輝度、銀河帯のコントラストを強化。<br>v36：惑星ごとに生態系を保存して再訪時に復元し、生態系の時間遅れを実際に進んだ年数で補正。<br>v37：時間倍率を最大10億倍まで拡張し、高速時間のプリセットを追加。<br>v38：惑星を移動しても文明の観察状態を同じ惑星ごとに保持。<br>v39：知能発達指標・遺伝情報の観察画面を追加。<br>v40：文明画面に国家・集団関係の試験表示を追加。<br>v41：国家段階の成立状況と社会組織能力を文明観察欄に表示。<br>v42：追加コードに混入した不正な改行表記を修正し、JavaScript構文と画面表示を正常化。<br>v43：遺伝情報画面を拡充し、32文字の仮想塩基列・複数形質指標・知能段階の一覧を惑星ごとに表示。<br>v44：文明パネルを人口・社会組織能力・到達済み社会技術の観察表示に変更。外交・国境など未実装機能を実在表示のように扱わないよう明記。<br>v45：起動時の時間倍率を×100に変更し、宇宙初期の膨張・温度変化が見えるよう自動再生を改善。物理モデルの採用値と未実装範囲を明示。<br>v46：宇宙の時代表示を放射優勢・物質優勢・再結合（晴れ上がり）の境界に合わせ、等時刻・温度補助量を追加。<br>v47：WebGPU起動待ちにタイムアウトと原因表示を追加。<br>v48：WebGPU非対応端末向けに簡易2D宇宙描画を追加。<br>v51：WebGPUが部分対応の端末でも描画画面の取得・設定失敗時に2Dへ切り替え。<br>v54：地表の絶滅種を生物描画から除外し、文明初期の集落・建物を道路段階から出現しやすく調整。<br>v47：WebGPUの起動待ちが無期限になる問題にタイムアウトと原因表示を追加。</div></details>
   <label>粒子数
     <select id="np">
@@ -255,13 +256,13 @@ add('info',['コンソール起動。ページのエラーとconsole出力をこ
 <div id="toast"></div>
 <div id="fatal"><div id="fatalMsg"></div></div>
 
-<script src="cosmology.js?v=59"></script>
-<script src="astro.js?v=59"></script>
-<script src="life.js?v=59"></script>
-<script src="civ.js?v=59"></script>
-<script src="eco.js?v=59"></script>
-<script src="scenario.js?v=59"></script>
-<script src="scenes.js?v=59"></script>
+<script src="cosmology.js?v=62"></script>
+<script src="astro.js?v=62"></script>
+<script src="life.js?v=62"></script>
+<script src="civ.js?v=62"></script>
+<script src="eco.js?v=62"></script>
+<script src="scenario.js?v=62"></script>
+<script src="scenes.js?v=62"></script>
 <script>
 (async function () {
 'use strict';
@@ -1166,7 +1167,7 @@ $('bLife').onclick = async () => {
 };
 
 // ------------------------------------------------------------------ 文明の実験(civ.js)
-let civFollow = null, civ = null, civKey = null, civRunning = true, civRuns = 0, civMsSeen = 0, civSeedNo = 0, civPaint = 0, civWorldLast = 0;
+let civLag = 0, civFollow = null, civ = null, civKey = null, civRunning = true, civRuns = 0, civMsSeen = 0, civSeedNo = 0, civPaint = 0, civWorldLast = 0;
  const civWorlds = new Map();
 const fmtPop = (x) => (x >= 1e8 ? (x / 1e8).toFixed(2) + '億' : x >= 1e4 ? (x / 1e4).toFixed(1) + '万' : Math.round(x).toString());
 function startCivWorld() { const t = scenes.civTarget(); if (!t) return; const old = civKey && civ ? civWorlds.set(civKey, { civ, civFollow, civSeedNo, civMsSeen }) : null; const saved = civWorlds.get(t.key); if (saved) { civ = saved.civ; civFollow = saved.civFollow; civSeedNo = saved.civSeedNo; civMsSeen = saved.civMsSeen; } else { civRuns++; civSeedNo = (Math.imul(SEED, 2654435761) ^ Math.imul(t.seed + 1, 40503) ^ civRuns * 7919) >>> 0; civ = Civ.create({ seed: civSeedNo }); civFollow = civ.pickPerson('oldest'); civMsSeen = 0; civWorlds.set(t.key, { civ, civFollow, civSeedNo, civMsSeen }); } civKey = t.key; civWorldLast = scenes.worldTime(); civRunning = true; $('civPause').textContent = '⏸'; paintCiv(true); }
@@ -1180,10 +1181,10 @@ function paintEco() {
   const e = scenes.eco();
   if (!e || $('ecoP').style.display === 'none' || performance.now() - ecoPaint < 500) return;
   ecoPaint = performance.now();
-  const s = e.stats(), KJ = { 0: '動物', 1: '鳥' };
+  const s = e.stats(), KJ = { 0: '動物', 1: '鳥', 2: '水の生物' };
   const tree = e.tree().map((x) => '<div style="padding-left:' + x.depth * 12 + 'px">' + (x.ext !== null ? '<span style="color:var(--dim)">✝ ' + x.name + '(' + fmtYears(x.born) + '〜' + fmtYears(x.ext) + ')</span>' : '● <b>' + x.name + '</b> ' + x.count + '匹 <span style="color:var(--dim)">' + KJ[x.kind] + ' 大きさ' + x.size.toFixed(2) + ' 速さ' + x.speed.toFixed(2) + ' 肉食度' + x.diet.toFixed(2) + '(最大' + x.peak + '匹)</span>') + '</div>').join('');
   const lg = e.log.slice(-14).reverse().map((l) => '<div style="' + (l.kind === 'mass' ? 'color:#f87171' : l.kind === 'spec' ? 'color:var(--accent2)' : '') + '">' + fmtYears(l.year) + ' ' + l.text + '</div>').join('');
-  $('ecoBody').innerHTML = '<div style="margin-top:6px">経過 <b>' + fmtYears(s.year) + '</b> ・ 個体 <b>' + s.n + '</b>匹 ・ 現存の種 <b>' + s.alive + '</b>(これまでに ' + s.total + ' 種、絶滅 ' + s.extinct + ') ・ 植物 ' + Math.round(e.plantFrac() * 100) + '% ・ 大量絶滅 ' + s.events + ' 回</div><div class="tr" style="margin-top:6px;overflow-x:auto"><b>系統(親 → 子)</b>' + tree + '</div><div class="lg"><b>出来事</b>' + lg + '</div>';
+  $('ecoBody').innerHTML = '<div style="margin-top:6px">経過 <b>' + fmtYears(s.year) + '</b> ・ 個体 <b>' + s.n + '</b>匹 ・ 現存の種 <b>' + s.alive + '</b>(これまでに ' + s.total + ' 種、絶滅 ' + s.extinct + ') ・ 植物 ' + Math.round(e.plantFrac() * 100) + '% ・ 大量絶滅 ' + s.events + ' 回' + (scenes.ecoLag() > 1 ? '<br><span style="color:var(--dim)">世界時間に対して約 ' + fmtYears(scenes.ecoLag()) + ' 分の遅れ(計算が追いつき次第、進みます)</span>' : '') + '</div><div class="tr" style="margin-top:6px;overflow-x:auto"><b>系統(親 → 子)</b>' + tree + '</div><div class="lg"><b>出来事</b>' + lg + '</div>';
 }
 
 // ------------------------------------------------------------------ いまの地球シナリオ(scenario.js)
@@ -1256,9 +1257,13 @@ function paintPerson() {
 $('civPause').onclick = () => { civRunning = !civRunning; $('civPause').textContent = civRunning ? '⏸' : '▶'; };
 function civTick(dt) {
   if (!civ || !civRunning || civ.ended) return;
-  const worldNow = scenes.worldTime(), elapsed = Math.max(0, worldNow - civWorldLast); civWorldLast = worldNow;
-  let left = elapsed; const t0 = performance.now();
-  while (left > 0.01 && performance.now() - t0 < 8 && !civ.ended) { const d = Math.min(civ.stepSize(), left); civ.step(d); left -= d; }
+  // 世界時間に追いつくまで進める。1フレームの計算時間(8ms)で終わらなかった分は「遅れ」として残し、次のフレームで続ける
+  const worldNow = scenes.worldTime(); let left = Math.max(0, worldNow - civWorldLast); const t0 = performance.now();
+  const eco = scenes.eco && scenes.eco(); if (eco) civ.envK = 0.55 + 0.7 * Math.min(1, eco.plantFrac()); // 土地が荒れると、養える人数が減る
+  while (left > 0.01 && performance.now() - t0 < 8 && !civ.ended) { const d = Math.min(left > 300 ? 25 : civ.stepSize(), left); civ.step(d); left -= d; civWorldLast += d; }
+  civLag = Math.max(0, worldNow - civWorldLast);
+  // 人間の活動(人口・エネルギー利用)が土地の実りを減らす
+  if (scenes.setHumanLoad) scenes.setHumanLoad(Math.min(1, 0.5 * civ.pop / 2000 + Math.min(0.5, civ.caps[0] / 20)));
   const names = Object.keys(civ.ms);
   if (names.length > civMsSeen) { for (const k of names.slice(civMsSeen)) { const m = Civ.MILESTONES.find((x) => x.key === k); logVisit('文明#' + civSeedNo + ': ' + m.jp + ' ' + fmtYears(civ.ms[k])); } civMsSeen = names.length; }
   if (performance.now() - civPaint > 250) paintCiv();
@@ -1278,7 +1283,7 @@ function paintCiv(force) {
   const progHtml = progs.length ? '<details style="margin-top:6px"><summary><b>💻 この世界で書かれたプログラム(' + progs.length + '本・実際に実行した結果)</b></summary>' + progs.map((pg) => '<div style="margin-top:6px"><b>' + pg.title + '</b> → 出力: ' + pg.out.join(', ') + '<pre>' + pg.code.map((c) => String(c.addr).padStart(2, ' ') + ' ' + c.name + (c.arg !== undefined ? ' ' + c.arg : '') + '  ; ' + c.meaning).join('\n') + '</pre></div>').join('') + '<div style="color:var(--dim)">命令の名前は、この世界の「情報」系の技術名から付いています(意味は右の説明)。</div></details>' : '';
   const indHtml = '', _unused = '<details style="margin-top:6px"><summary><b>👤 注目している個人(全体から ' + Math.min(150, Math.floor(s.pop)) + ' 人を追跡中)</b></summary>' + ind + '</details>';
   paintPerson();
-  body.innerHTML = '<div style="margin-top:6px">世界のシード <b>' + civSeedNo + '</b> ・ ' + fmtYears(s.year) + '経過 ・ 追跡中 ' + fmtPop(s.pop) + '人 ・ 技術 ' + s.items + '(作られた総数 ' + s.total + ')' + (s.ended ? ' <b style="color:#f87171">途絶えた</b>' : '') + '</div><div class="bars" style="margin-top:6px">' + bars + '</div><div class="ms">' + ms + '</div><div class="tl">' + tl + '</div><details style="margin-top:8px"><summary><b>🏛 社会・国家形成の観察</b></summary><p>国家形成の前提となる社会組織能力と人口・技術の到達点です（外交・国境・戦争は未モデル化）。</p><div>社会組織能力：'+caps[6].toFixed(2)+'</div><div>人口：'+fmtPop(s.pop)+'</div><div>社会段階：'+(s.ms.city!==undefined?'都市・大規模組織':s.ms.agri!==undefined?'定住・農耕':'小集団・移動生活')+'</div><div>到達済み：</div><ul style="padding-left:18px">'+Civ.MILESTONES.filter(m=>s.ms[m.key]!==undefined).map(m=>'<li>'+m.jp.split('(')[0]+'（'+fmtYears(s.ms[m.key])+'）</li>').join('')+'</ul></details>' + indHtml + progHtml;
+  body.innerHTML = '<div style="margin-top:6px">世界のシード <b>' + civSeedNo + '</b> ・ ' + fmtYears(s.year) + '経過' + (civLag > 1 ? '(計算が遅れ中: 約 ' + fmtYears(civLag) + ' 分)' : '') + ' ・ 追跡中 ' + fmtPop(s.pop) + '人 ・ 技術 ' + s.items + '(作られた総数 ' + s.total + ')' + (s.ended ? ' <b style="color:#f87171">途絶えた</b>' : '') + '</div><div class="bars" style="margin-top:6px">' + bars + '</div><div class="ms">' + ms + '</div><div class="tl">' + tl + '</div><details style="margin-top:8px" open><summary><b>🏛 集団・国家・交易・戦争(個人が所属して動く)</b></summary><div>社会の組織力:'+caps[6].toFixed(2)+'</div><div>集団('+nationList.length+'):</div><ul style="padding-left:18px">'+nationList.slice(0,10).map(n=>'<li><b>'+n.name+'</b> '+n.size+'人 ・ 指導的な人: '+n.leader+'</li>').join('')+'</ul><div>集団どうしの関係:</div><ul style="padding-left:18px">'+(relations.slice(0,12).map(r=>'<li>'+r.a+' ⇔ '+r.b+': <b>'+r.kind+'</b>(交易'+(r.trade*100).toFixed(0)+'% ・ 敵意'+(r.hostility*100).toFixed(0)+'%)</li>').join('')||'<li>集団が一つだけ</li>')+'</ul><div style="color:var(--dim);font-size:11px">交易が増えると敵意が下がり、人が増えて資源が足りなくなると敵意が上がります。敵意が高く武器が進むほど戦争が起き、勝った側が相手を併合することもあります。外交条約や国境線は未モデル化です。</div></details>' + indHtml + progHtml;
 }
 // ------------------------------------------------------------------ 自由飛行と天体
 const fkeys = {}; let cosWalk = 0;
@@ -1444,6 +1449,12 @@ function updateHud() {
   const Tc = lnA > 700 ? 0 : cosmo.TOfA(a);
   $('tv').innerHTML = Tc <= cosmo.TdS ? fmtExp(cosmo.TdS, ' K') + '<br><small>ドジッター温度(これ以下に冷えない)</small>' : fmtExp(Tc, ' K');
   $('av').innerHTML = l10 < 4 ? (a < 0.01 ? fmtExp(a, '') : a.toFixed(a < 1 ? 3 : 2)) : l10 < 1e5 ? '10<sup>' + l10.toFixed(l10 < 100 ? 1 : 0) + '</sup>' : '10<sup>(' + fmtExp(l10, '') + ')</sup>';
+  { // 初期宇宙の物理量(温度・中性子比・ヘリウム・水素の電離度)。式は cosmology.js の plasma()
+    const p = cosmo.plasma(t), el = $('plv'), k = $('plk');
+    const show = t < cosmo.tRecombination * 4;
+    el.style.display = k.style.display = show ? '' : 'none';
+    if (show) el.innerHTML = (p.TMeV >= 0.01 ? p.TMeV.toPrecision(3) + ' MeV' : fmtExp(p.TK, ' K')) + (p.Yp !== null ? '<br>ヘリウム4 ' + (p.Yp * 100).toFixed(1) + '%(質量)' : p.np !== null && p.TMeV > 0.07 ? '<br>中性子/陽子 ' + p.np.toFixed(2) : '') + (p.xe !== null ? '<br>水素の電離度 ' + (p.xe * 100 >= 0.1 ? (p.xe * 100).toFixed(1) : p.xe.toExponential(1)) + (p.xe > 0.5 ? '(プラズマ)' : '(ほぼ中性)') : '');
+  }
   const m = st.limited ? 'GPU律速で速度を制限中' : st.seek !== null ? 'ジャンプ中…' : t < tS ? '線形成長(解析)' : t > tF ? '構造は凍結(膨張のみ)' : 'N体計算(重力)';
   $('mode').textContent = m + (st.logMode ? '・対数時間' : '');
   if (!tlDrag) $('tl').value = Math.round(tToU(t));

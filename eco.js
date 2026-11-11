@@ -14,7 +14,7 @@
   const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
 
   function create(opts) {
-    const rnd = mulberry((opts.seed >>> 0) || 1), blocked = opts.blocked || (() => false);
+    const rnd = mulberry((opts.seed >>> 0) || 1), blocked = opts.blocked || (() => false), water = opts.water || (() => false);
     const w = { year: 0, species: [], inds: [], log: [], events: 0, cover: opts.cover === undefined ? 0.85 : opts.cover, coverMul: 1, nextId: 1, extinctCount: 0, born: 0, died: 0 };
     const gR = Array.from({ length: NR }, () => new Float32Array(G * G).fill(0.8)), fert = new Float32Array(G * G);
     for (let i = 0; i < G * G; i++) fert[i] = 0.55 + 0.9 * rnd();
@@ -36,16 +36,17 @@
     }
     // 初期の種: 外から渡された見た目の一覧から作る(4つに1つは肉食)
     const SIZES = [0.5, 0.75, 1.1, 1.55, 2.1, 0.9, 1.3, 1.8];
-    const pool = (opts.species || []).map((vis, i) => ({ vis, role: i % 4 === 3 ? 'carn' : i % 6 === 5 ? 'omni' : 'herb', size: SIZES[i % SIZES.length] }));
+    const all = opts.species || [], MAXSP = 56, picked = all.length <= MAXSP ? all : Array.from({ length: MAXSP }, (_, i) => all[Math.floor(i * all.length / MAXSP)]); // 種が多すぎても、最初に動かすのは56種まで
+    const pool = picked.map((vis, i) => ({ vis, role: i % 4 === 3 ? 'carn' : i % 6 === 5 ? 'omni' : 'herb', size: SIZES[i % SIZES.length] }));
     w.pool = pool;
     function introduce(p, n) {
       const v = Object.assign({}, p.vis); v.sizeRel = p.role === 'carn' ? 1.3 : p.size;
       if (w.species.some((q) => q.vis.name === v.name)) v.name = nm() + v.name.slice(-1);
       const g = genesFor(v, p.role), sp = addSpecies(v, -1, g);
-      for (let k = 0; k < n; k++) addInd(sp.id, g.map((x, j) => clamp(x + (rnd() - 0.5) * 0.12 * GS[j], 0.3, 2.6)), null, rnd() * L, rnd() * L, rnd() * 4);
+      for (let k = 0; k < n; k++) { let x = rnd() * L, z = rnd() * L; if (v.kind === 2) for (let t = 0; t < 40 && !water(x, z); t++) { x = rnd() * L; z = rnd() * L; } addInd(sp.id, g.map((x2, j) => clamp(x2 + (rnd() - 0.5) * 0.12 * GS[j], 0.3, 2.6)), null, x, z, rnd() * 4); }
       return sp;
     }
-    pool.forEach((p) => introduce(p, p.role === 'carn' ? 10 : 16));
+    pool.forEach((p) => introduce(p, Math.max(4, Math.floor((p.role === 'carn' ? 9 : 14) * Math.min(1, 40 / Math.max(1, pool.length) + 0.4)))));
     const cellOf = (x, z) => Math.min(G - 1, Math.floor(x / CELL)) + G * Math.min(G - 1, Math.floor(z / CELL));
     const wrap = (v) => ((v % L) + L) % L;
     const dd = (a, b) => { let d = Math.abs(a - b); return d > L / 2 ? L - d : d; };
@@ -116,7 +117,8 @@
         a.e -= (16 * Math.pow(size, 0.75) / g[4]) * dt * (1 + 0.5 * g[1] * 0.3);
         // 移動(水の上には行かない)
         const tl = Math.hypot(tx, tz) || 1, nx = wrap(a.x + (tx / tl) * spd), nz = wrap(a.z + (tz / tl) * spd);
-        if (!blocked(nx, nz)) { a.vx = (tx / tl) * spd; a.vz = (tz / tl) * spd; a.x = nx; a.z = nz; } else { act = '休む'; a.vx = a.vz = 0; }
+        const kind = sp.vis.kind, okMove = kind === 2 ? water(nx, nz) : kind === 1 ? true : !blocked(nx, nz); // 水中の生物は水の上だけ、鳥はどこでも、陸の動物は水の外だけ
+        if (okMove) { a.vx = (tx / tl) * spd; a.vz = (tz / tl) * spd; a.x = nx; a.z = nz; } else { act = '休む'; a.vx = a.vz = 0; }
         if (act === '歩く' && a.e < 60 * size) act = '探す';
         a.act = act;
         // 繁殖: 体力があり、近くに同種のオスがいるとき
@@ -185,9 +187,9 @@
       epoch();
     }
     function run(years) { // 経過した年数だけ進める(1ステップ=0.1年)。多すぎるときは打ち切って、進んだ年数を返す
-      let n = 0; const t0 = Date.now();
-      while (years > 0 && Date.now() - t0 < 4) { const d = Math.min(DT, years); step(d); years -= d; n++; }
-      return n * DT;
+      let adv = 0; const t0 = Date.now(), big = years > 8; // 溜まった時間が多いときは、粗い刻み(0.25年)で早送りする
+      while (years > 0.001 && Date.now() - t0 < 4) { const d = Math.min(big ? 0.25 : DT, years); step(d); years -= d; adv += d; }
+      return adv;
     }
     function list() {
       return w.species.map((sp) => {
