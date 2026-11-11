@@ -55,6 +55,12 @@
     padding: 24px; text-align: center; line-height: 1.8; }
   #fatal.show { display: flex; }
   .lbl { }
+  #joy { position: fixed; left: 14px; bottom: 250px; width: 120px; height: 120px; border-radius: 50%; background: rgba(127,166,255,.12); border: 1px solid var(--line); z-index: 40; touch-action: none; display: none; }
+  #joyK { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px; border-radius: 50%; background: rgba(127,166,255,.55); pointer-events: none; }
+  #joyV { position: fixed; left: 142px; bottom: 262px; z-index: 40; display: none; flex-direction: column; gap: 10px; }
+  #joyV button { width: 46px; height: 46px; padding: 0; border-radius: 50%; }
+  body.hideui #joy, body.hideui #joyV { display: none !important; }
+  #cmpT { width: 100%; border-collapse: collapse; font-size: 11px; } #cmpT td { border-bottom: 1px solid rgba(127,166,255,.12); padding: 2px 3px; vertical-align: top; }
   #bUI { position: fixed; right: 8px; top: 50%; z-index: 30; width: 38px; height: 38px; padding: 0; border-radius: 50%; opacity: .55; font-size: 18px; }
   #bUI:hover { opacity: 1; }
   body.hideui #info, body.hideui #opts, body.hideui #bar, body.hideui #civ, body.hideui #lifeP, body.hideui #dnaP, body.hideui #nearP, body.hideui #objP, body.hideui #ecoP, body.hideui #scnP, body.hideui #markers { display: none !important; }
@@ -150,8 +156,8 @@ add('info',['コンソール起動。ページのエラーとconsole出力をこ
 
 <details id="opts" class="panel" open>
   <summary>設定</summary>
-  <div style="margin:6px 0 10px;color:#9fb4ff;font-size:13px;font-weight:bold">アプリ バージョン：v62</div>
-  <details style="font-size:12px;margin:6px 0"><summary>宇宙・物理モデルと限界</summary><div style="line-height:1.6;margin-top:6px">宇宙膨張はΛCDM近似（放射・物質・暗黒エネルギー）で計算。基準値は H₀=67.7 km/s/Mpc、Ωm=0.31、Ωr=9.0×10⁻⁵、ΩΛ=1−Ωm−Ωr。赤方偏移・CMB温度・線形成長率はこの背景宇宙から計算します。<br><br>注意：開始点は特異点そのものではなく、スケール因子 a=10⁻¹⁰ 付近です。インフレーション、量子重力、元素合成、詳細な再結合・ニュートリノ物理は未実装。銀河形成は粒子数・計算予算に制限された簡易N体モデルで、実観測の精密再現ではありません。地表・生命・文明も確立した科学モデルではなく、仮説・手続き生成です。<br><br>現実に近づけるには、物理過程を段階ごとに追加し、観測値との比較とテストを行います。</div></details><details style="font-size:12px;margin-bottom:8px"><summary>変更履歴</summary><div>v30：生命の起源を化学反応から確率的に開始し、環境依存の生物多様化と地表滞在中の文明自動進行を追加。<br>v31：知的生命の種族名と生命起源の反応経路を地表情報に表示。<br>v32：地表時間を宇宙共通の再生・逆再生・速度操作に接続し、生態系の時間進行を連動。<br>v33：文明初期化処理に混入した改行文字を修正し、JavaScript構文エラーを解消。<br>v34：地表生態系の二重進行を解消し、文明の進行を地表世界時間に同期。文明パネルから新規世界を作る操作を廃止。<br>v35：宇宙・地表の星の密度と輝度、銀河帯のコントラストを強化。<br>v36：惑星ごとに生態系を保存して再訪時に復元し、生態系の時間遅れを実際に進んだ年数で補正。<br>v37：時間倍率を最大10億倍まで拡張し、高速時間のプリセットを追加。<br>v38：惑星を移動しても文明の観察状態を同じ惑星ごとに保持。<br>v39：知能発達指標・遺伝情報の観察画面を追加。<br>v40：文明画面に国家・集団関係の試験表示を追加。<br>v41：国家段階の成立状況と社会組織能力を文明観察欄に表示。<br>v42：追加コードに混入した不正な改行表記を修正し、JavaScript構文と画面表示を正常化。<br>v43：遺伝情報画面を拡充し、32文字の仮想塩基列・複数形質指標・知能段階の一覧を惑星ごとに表示。<br>v44：文明パネルを人口・社会組織能力・到達済み社会技術の観察表示に変更。外交・国境など未実装機能を実在表示のように扱わないよう明記。<br>v45：起動時の時間倍率を×100に変更し、宇宙初期の膨張・温度変化が見えるよう自動再生を改善。物理モデルの採用値と未実装範囲を明示。<br>v46：宇宙の時代表示を放射優勢・物質優勢・再結合（晴れ上がり）の境界に合わせ、等時刻・温度補助量を追加。<br>v47：WebGPU起動待ちにタイムアウトと原因表示を追加。<br>v48：WebGPU非対応端末向けに簡易2D宇宙描画を追加。<br>v51：WebGPUが部分対応の端末でも描画画面の取得・設定失敗時に2Dへ切り替え。<br>v54：地表の絶滅種を生物描画から除外し、文明初期の集落・建物を道路段階から出現しやすく調整。<br>v47：WebGPUの起動待ちが無期限になる問題にタイムアウトと原因表示を追加。</div></details>
+  <div style="margin:6px 0 10px;color:#9fb4ff;font-size:13px;font-weight:bold">アプリ バージョン：v63</div>
+  <details style="font-size:12px;margin:6px 0"><summary>宇宙・物理モデルと限界</summary><div style="line-height:1.6;margin-top:6px">宇宙膨張はΛCDM近似（放射・物質・暗黒エネルギー）で計算。基準値は H₀=67.7 km/s/Mpc、Ωm=0.31、Ωr=9.0×10⁻⁵、ΩΛ=1−Ωm−Ωr。赤方偏移・CMB温度・線形成長率はこの背景宇宙から計算します。<br><br>注意：開始点は特異点そのものではなく、スケール因子 a=10⁻¹⁰ 付近です。インフレーション、量子重力、元素合成、詳細な再結合・ニュートリノ物理は未実装。銀河形成は粒子数・計算予算に制限された簡易N体モデルで、実観測の精密再現ではありません。地表・生命・文明も確立した科学モデルではなく、仮説・手続き生成です。<br><br>現実に近づけるには、物理過程を段階ごとに追加し、観測値との比較とテストを行います。</div></details><details style="font-size:12px;margin-bottom:8px"><summary>変更履歴</summary><div>v63：初期宇宙の物理量、集団・交易・戦争、感染症、気候(CO₂と気温)、言語の系統、水中の生物、天体の時間変化、観測との比較、共有リンクの拡張、仮想スティックを追加。地表の描画が止まる不具合と生命段階の番号ずれを修正。<br>v30：生命の起源を化学反応から確率的に開始し、環境依存の生物多様化と地表滞在中の文明自動進行を追加。<br>v31：知的生命の種族名と生命起源の反応経路を地表情報に表示。<br>v32：地表時間を宇宙共通の再生・逆再生・速度操作に接続し、生態系の時間進行を連動。<br>v33：文明初期化処理に混入した改行文字を修正し、JavaScript構文エラーを解消。<br>v34：地表生態系の二重進行を解消し、文明の進行を地表世界時間に同期。文明パネルから新規世界を作る操作を廃止。<br>v35：宇宙・地表の星の密度と輝度、銀河帯のコントラストを強化。<br>v36：惑星ごとに生態系を保存して再訪時に復元し、生態系の時間遅れを実際に進んだ年数で補正。<br>v37：時間倍率を最大10億倍まで拡張し、高速時間のプリセットを追加。<br>v38：惑星を移動しても文明の観察状態を同じ惑星ごとに保持。<br>v39：知能発達指標・遺伝情報の観察画面を追加。<br>v40：文明画面に国家・集団関係の試験表示を追加。<br>v41：国家段階の成立状況と社会組織能力を文明観察欄に表示。<br>v42：追加コードに混入した不正な改行表記を修正し、JavaScript構文と画面表示を正常化。<br>v43：遺伝情報画面を拡充し、32文字の仮想塩基列・複数形質指標・知能段階の一覧を惑星ごとに表示。<br>v44：文明パネルを人口・社会組織能力・到達済み社会技術の観察表示に変更。外交・国境など未実装機能を実在表示のように扱わないよう明記。<br>v45：起動時の時間倍率を×100に変更し、宇宙初期の膨張・温度変化が見えるよう自動再生を改善。物理モデルの採用値と未実装範囲を明示。<br>v46：宇宙の時代表示を放射優勢・物質優勢・再結合（晴れ上がり）の境界に合わせ、等時刻・温度補助量を追加。<br>v47：WebGPU起動待ちにタイムアウトと原因表示を追加。<br>v48：WebGPU非対応端末向けに簡易2D宇宙描画を追加。<br>v51：WebGPUが部分対応の端末でも描画画面の取得・設定失敗時に2Dへ切り替え。<br>v54：地表の絶滅種を生物描画から除外し、文明初期の集落・建物を道路段階から出現しやすく調整。<br>v47：WebGPUの起動待ちが無期限になる問題にタイムアウトと原因表示を追加。</div></details>
   <label>粒子数
     <select id="np">
       <option value="48">11万 (48³)</option>
@@ -162,6 +168,8 @@ add('info',['コンソール起動。ページのエラーとconsole出力をこ
   <label>ダークマター表示 <input type="checkbox" id="dm" checked></label>
   <label>明るさ <input type="range" id="expo" min="-1" max="1" step="0.05" value="0"></label>
   <label>自動回転 <input type="checkbox" id="rot" checked></label>
+  <label>生命の生まれやすさ <select id="ease"><option value="5">とても稀</option><option value="2">稀</option><option value="1" selected>標準(地球が目安)</option><option value="0.4">生まれやすい</option><option value="0.15">とても生まれやすい</option></select></label>
+  <details style="font-size:12px;margin:6px 0"><summary>📏 観測との比較</summary><div style="color:var(--dim);font-size:11px;margin:4px 0">このシミュレーターの計算結果と、実際の観測値を並べます。観測値は公表値を手で入れた概数です(最新の値は各出典で確認してください)。</div><table id="cmpT"></table></details>
   <label>境界の枠 <input type="checkbox" id="box" checked></label>
   <div id="uni">
     <div>この宇宙のシード <b id="seedv"></b></div>
@@ -251,18 +259,20 @@ add('info',['コンソール起動。ページのエラーとconsole出力をこ
   <div class="row" style="justify-content:space-between"><b>🌱 生命のいる惑星</b><button class="small" id="lifeX">✕</button></div>
   <div id="lifeBody" style="color:var(--dim)"></div>
 </div>
+<div id="joy"><div id="joyK"></div></div>
+<div id="joyV"><button id="joyU" title="上へ">▲</button><button id="joyD" title="下へ">▼</button></div>
 <div id="markers"></div>
 <div id="fade"></div>
 <div id="toast"></div>
 <div id="fatal"><div id="fatalMsg"></div></div>
 
-<script src="cosmology.js?v=62"></script>
-<script src="astro.js?v=62"></script>
-<script src="life.js?v=62"></script>
-<script src="civ.js?v=62"></script>
-<script src="eco.js?v=62"></script>
-<script src="scenario.js?v=62"></script>
-<script src="scenes.js?v=62"></script>
+<script src="cosmology.js?v=63"></script>
+<script src="astro.js?v=63"></script>
+<script src="life.js?v=63"></script>
+<script src="civ.js?v=63"></script>
+<script src="eco.js?v=63"></script>
+<script src="scenario.js?v=63"></script>
+<script src="scenes.js?v=63"></script>
 <script>
 (async function () {
 'use strict';
@@ -1032,8 +1042,8 @@ function newUniverse(seed, n, how) {
 $('bNew').onclick = () => newUniverse(randSeed(), np, 'new');
 $('bRepro').onclick = () => { const v = Math.floor(Number($('seedIn').value)); if (!(v > 0)) { toast('シード番号(正の整数)を入れてください'); return; } newUniverse(v, np, 'repro'); };
 $('bCopy').onclick = async () => {
-  const url = location.origin + location.pathname + '?seed=' + SEED + '&np=' + np;
-  try { await navigator.clipboard.writeText(url); toast('この宇宙を再現できるリンクをコピーしました'); } catch (e) { prompt('このリンクを開くと同じ宇宙になります', url); }
+  const url = location.origin + location.pathname + '?seed=' + SEED + '&np=' + np + '&t=' + Number(st.t.toPrecision(6)) + (Life.cfg.ease !== 1 ? '&ease=' + Life.cfg.ease : '');
+  try { await navigator.clipboard.writeText(url); toast('この宇宙(シード・粒子数・いまの時刻・生命の生まれやすさ)を再現できるリンクをコピーしました', 4000); } catch (e) { prompt('このリンクを開くと同じ宇宙になります', url); }
 };
 $('bExport').onclick = () => {
   const blob = new Blob([JSON.stringify({ app: 'cosmos-sim', exported: new Date().toISOString(), universes: logRead() }, null, 1)], { type: 'application/json' });
@@ -1282,16 +1292,23 @@ function paintCiv(force) {
   const progs = civ.programs();
   const progHtml = progs.length ? '<details style="margin-top:6px"><summary><b>💻 この世界で書かれたプログラム(' + progs.length + '本・実際に実行した結果)</b></summary>' + progs.map((pg) => '<div style="margin-top:6px"><b>' + pg.title + '</b> → 出力: ' + pg.out.join(', ') + '<pre>' + pg.code.map((c) => String(c.addr).padStart(2, ' ') + ' ' + c.name + (c.arg !== undefined ? ' ' + c.arg : '') + '  ; ' + c.meaning).join('\n') + '</pre></div>').join('') + '<div style="color:var(--dim)">命令の名前は、この世界の「情報」系の技術名から付いています(意味は右の説明)。</div></details>' : '';
   const indHtml = '', _unused = '<details style="margin-top:6px"><summary><b>👤 注目している個人(全体から ' + Math.min(150, Math.floor(s.pop)) + ' 人を追跡中)</b></summary>' + ind + '</details>';
+  const cl = civ.climate, epi = civ.epidemics.slice(-6).reverse(), langs = state.langs || [];
+  const lt = (id, d) => langs.filter((l) => l.parent === id).map((l) => '<div style="padding-left:' + d * 12 + 'px">' + (l.alive ? '● ' : '<span style="color:var(--dim)">✝ ') + l.name + 'の言葉「' + l.sample + '」 祖語と' + Math.round(l.toRoot * 100) + '%共通' + (l.alive ? '' : '</span>') + '</div>' + lt(l.id, d + 1)).join('');
+  const extraHtml = '<details style="margin-top:8px"><summary><b>🌡 気候(エネルギー利用とCO₂)</b></summary><div>CO₂ ' + Math.round(cl.co2) + ' ppm ・ 気温の変化 ' + (cl.dT >= 0 ? '+' : '') + cl.dT.toFixed(2) + '℃ ・ 排出 ' + cl.emis.toFixed(2) + ' ppm/年 ・ 排出の少ないエネルギーの割合 ' + Math.round(cl.clean * 100) + '%</div><div style="color:var(--dim);font-size:11px">CO₂が2倍で約3℃上がる式です。気温が上がると土地の実りが減り、養える人数と生態系の植物が減ります。注目する地域を惑星全体の縮図とみなした換算で、数値は仮説です。</div></details>'
+    + '<details style="margin-top:8px"><summary><b>🦠 感染症の記録(' + civ.epidemics.length + '件)</b></summary>' + (epi.map((e) => '<div>' + fmtYears(e.year) + ' ' + e.name + ': 感染 ' + e.infected + '人・死亡 ' + e.dead + '人・' + e.groups + '集団(1人が約' + e.R0.toFixed(1) + '人にうつす、致死率' + Math.round(e.mort * 100) + '%)</div>').join('') || '<div>まだありません</div>') + '<div style="color:var(--dim);font-size:11px">人から人へ、個人ごとに感染を追います。同じ集団の中で広がりやすく、交易相手の集団にも飛びます。医療(生命の能力)が進むと、うつりにくく死ににくくなります。</div></details>'
+    + '<details style="margin-top:8px"><summary><b>🗣 言語の系統(' + langs.filter((l) => l.alive).length + '言語)</b></summary>' + (langs.length ? '<div>' + (langs[0].alive ? '● ' : '✝ ') + langs[0].name + 'の言葉「' + langs[0].sample + '」(「水・人」)</div>' + lt(0, 1) : '') + '<div style="color:var(--dim);font-size:11px">言葉は時間とともに音が変わり、分かれた集団ほど通じなくなります。交易で単語を借り、言葉が通じるほど交易が進みます。</div></details>';
+  // 気温の変化は、この土地の生態系(植物の量)にも効く
+  if (scenes.setClimate) scenes.setClimate(cl.dT);
   paintPerson();
-  body.innerHTML = '<div style="margin-top:6px">世界のシード <b>' + civSeedNo + '</b> ・ ' + fmtYears(s.year) + '経過' + (civLag > 1 ? '(計算が遅れ中: 約 ' + fmtYears(civLag) + ' 分)' : '') + ' ・ 追跡中 ' + fmtPop(s.pop) + '人 ・ 技術 ' + s.items + '(作られた総数 ' + s.total + ')' + (s.ended ? ' <b style="color:#f87171">途絶えた</b>' : '') + '</div><div class="bars" style="margin-top:6px">' + bars + '</div><div class="ms">' + ms + '</div><div class="tl">' + tl + '</div><details style="margin-top:8px" open><summary><b>🏛 集団・国家・交易・戦争(個人が所属して動く)</b></summary><div>社会の組織力:'+caps[6].toFixed(2)+'</div><div>集団('+nationList.length+'):</div><ul style="padding-left:18px">'+nationList.slice(0,10).map(n=>'<li><b>'+n.name+'</b> '+n.size+'人 ・ 指導的な人: '+n.leader+'</li>').join('')+'</ul><div>集団どうしの関係:</div><ul style="padding-left:18px">'+(relations.slice(0,12).map(r=>'<li>'+r.a+' ⇔ '+r.b+': <b>'+r.kind+'</b>(交易'+(r.trade*100).toFixed(0)+'% ・ 敵意'+(r.hostility*100).toFixed(0)+'%)</li>').join('')||'<li>集団が一つだけ</li>')+'</ul><div style="color:var(--dim);font-size:11px">交易が増えると敵意が下がり、人が増えて資源が足りなくなると敵意が上がります。敵意が高く武器が進むほど戦争が起き、勝った側が相手を併合することもあります。外交条約や国境線は未モデル化です。</div></details>' + indHtml + progHtml;
+  body.innerHTML = '<div style="margin-top:6px">世界のシード <b>' + civSeedNo + '</b> ・ ' + fmtYears(s.year) + '経過' + (civLag > 1 ? '(計算が遅れ中: 約 ' + fmtYears(civLag) + ' 分)' : '') + ' ・ 追跡中 ' + fmtPop(s.pop) + '人 ・ 技術 ' + s.items + '(作られた総数 ' + s.total + ')' + (s.ended ? ' <b style="color:#f87171">途絶えた</b>' : '') + '</div><div class="bars" style="margin-top:6px">' + bars + '</div><div class="ms">' + ms + '</div><div class="tl">' + tl + '</div><details style="margin-top:8px" open><summary><b>🏛 集団・国家・交易・戦争(個人が所属して動く)</b></summary><div>社会の組織力:'+caps[6].toFixed(2)+'</div><div>集団('+nationList.length+'):</div><ul style="padding-left:18px">'+nationList.slice(0,10).map(n=>'<li><b>'+n.name+'</b> '+n.size+'人 ・ 指導的な人: '+n.leader+'<br><span style="color:var(--dim)">'+n.words+'</span></li>').join('')+'</ul><div>集団どうしの関係:</div><ul style="padding-left:18px">'+(relations.slice(0,12).map(r=>'<li>'+r.a+' ⇔ '+r.b+': <b>'+r.kind+'</b>(交易'+(r.trade*100).toFixed(0)+'% ・ 敵意'+(r.hostility*100).toFixed(0)+'% ・ 言葉の通じやすさ'+(r.intel*100).toFixed(0)+'%)</li>').join('')||'<li>集団が一つだけ</li>')+'</ul><div style="color:var(--dim);font-size:11px">交易が増えると敵意が下がり、人が増えて資源が足りなくなると敵意が上がります。敵意が高く武器が進むほど戦争が起き、勝った側が相手を併合することもあります。外交条約や国境線は未モデル化です。</div></details>' + extraHtml + indHtml + progHtml;
 }
 // ------------------------------------------------------------------ 自由飛行と天体
-const fkeys = {}; let cosWalk = 0;
+const fkeys = {}; let cosWalk = 0, cosStrafe = 0, cosVert = 0;
 window.addEventListener('keydown', (e) => { if (!/INPUT|TEXTAREA|SELECT/.test((e.target || {}).tagName || '')) fkeys[e.key.toLowerCase()] = true; });
 window.addEventListener('keyup', (e) => { fkeys[e.key.toLowerCase()] = false; });
 function cosmosFly(dt) {
   const fw = [Math.cos(cam.el) * Math.sin(cam.az), Math.sin(cam.el), Math.cos(cam.el) * Math.cos(cam.az)], r = [Math.cos(cam.az), 0, -Math.sin(cam.az)];
-  const fi = cosWalk + (fkeys.w || fkeys.arrowup ? 1 : 0) - (fkeys.s || fkeys.arrowdown ? 1 : 0), si = (fkeys.d || fkeys.arrowright ? 1 : 0) - (fkeys.a || fkeys.arrowleft ? 1 : 0), vi = (fkeys.e || fkeys[' '] ? 1 : 0) - (fkeys.q ? 1 : 0);
+  const fi = cosWalk + (fkeys.w || fkeys.arrowup ? 1 : 0) - (fkeys.s || fkeys.arrowdown ? 1 : 0), si = cosStrafe + (fkeys.d || fkeys.arrowright ? 1 : 0) - (fkeys.a || fkeys.arrowleft ? 1 : 0), vi = cosVert + (fkeys.e || fkeys[' '] ? 1 : 0) - (fkeys.q ? 1 : 0);
   const sp = 0.6 * (cam.spd || 1) * (fkeys.shift ? 5 : 1) * dt;
   for (let k = 0; k < 3; k++) cam.pos[k] = Math.max(-4, Math.min(4, cam.pos[k] + fw[k] * fi * sp + r[k] * si * sp + (k === 1 ? vi * sp : 0)));
 }
@@ -1302,6 +1319,10 @@ function updateFlyUI(kind) {
   $('bFly').style.display = canFly ? '' : 'none'; $('bFly').classList.toggle('on', fl);
   $('bWalk').style.display = kind === 'surface' || fl ? '' : 'none'; $('bBk').style.display = fl ? '' : 'none';
   $('bObj').style.display = kind === 'cosmos' || kind === 'galaxy' ? '' : 'none';
+  // 仮想スティック(タッチ端末): 地表を歩くとき・自由飛行のとき
+  const joyOn = (coarse || QS.has('joy')) && (kind === 'surface' || fl);
+  $('joy').style.display = joyOn ? 'block' : 'none'; $('joyV').style.display = joyOn && fl ? 'flex' : 'none';
+  if (joyOn) { $('bWalk').style.display = 'none'; $('bBk').style.display = 'none'; }
   if (kind !== 'cosmos' && kind !== 'galaxy') $('objP').style.display = 'none';
 }
 $('bFly').onclick = () => {
@@ -1316,6 +1337,17 @@ $('bFly').onclick = () => {
 {
   const hold = (id, v) => { const el = $(id), on = (x) => (e) => { e.preventDefault(); scenes.setWalk(x); cosWalk = x; }; el.addEventListener('pointerdown', on(v)); el.addEventListener('pointerup', on(0)); el.addEventListener('pointerleave', on(0)); el.addEventListener('pointercancel', on(0)); };
   hold('bBk', -1);
+}
+{ // 仮想スティック: 上下=前後、左右=横移動
+  const j = $('joy'), k = $('joyK'); let pid = null;
+  const set = (f, s2) => { scenes.setMove(f, s2); cosWalk = f; cosStrafe = s2; k.style.transform = 'translate(' + (s2 * 37).toFixed(0) + 'px,' + (-f * 37).toFixed(0) + 'px)'; };
+  const mv = (e) => { const r = j.getBoundingClientRect(); let x = (e.clientX - r.left - r.width / 2) / (r.width / 2), y = (e.clientY - r.top - r.height / 2) / (r.height / 2); const l = Math.hypot(x, y); if (l > 1) { x /= l; y /= l; } set(-y, x); };
+  j.addEventListener('pointerdown', (e) => { pid = e.pointerId; j.setPointerCapture(pid); mv(e); e.preventDefault(); });
+  j.addEventListener('pointermove', (e) => { if (e.pointerId === pid) mv(e); });
+  const end = (e) => { if (e.pointerId === pid) { pid = null; set(0, 0); } };
+  j.addEventListener('pointerup', end); j.addEventListener('pointercancel', end);
+  const vb = (id, v) => { const el = $(id), on = (x) => (e) => { e.preventDefault(); scenes.setVert(x); cosVert = x; }; el.addEventListener('pointerdown', on(v)); el.addEventListener('pointerup', on(0)); el.addEventListener('pointerleave', on(0)); el.addEventListener('pointercancel', on(0)); };
+  vb('joyU', 1); vb('joyD', -1);
 }
 const OBJ_BLURB = { bh: '太陽の数倍〜数十倍の質量の星が崩壊してできる。光も出られない。', smbh: '銀河の中心にあり、太陽の数百万〜数十億倍。ジェットを出すとクエーサーとして輝く。', ns: '星の芯が潰れた、街ほどの大きさの超高密度の星。灯台のように脈動する。', magnetar: '中性子星のうち、宇宙でいちばん強い磁場をもつもの。', wd: '太陽くらいの星の最期に残る、地球ほどの大きさの高密度の芯。', snr: '大きな星が爆発したあとに広がるガスの殻。', neb: '星が生まれるガスの雲。若い星の光で輝く。', pn: '太陽くらいの星が外層を放出したガスの殻。', gc: '数十万個の古い星が球状に集まった星団。' };
 $('objX').onclick = () => { $('objP').style.display = 'none'; };
@@ -1495,6 +1527,13 @@ try {
   rebuild(np);
   $('seedv').textContent = String(SEED);
   logStart(SEED_FROM_URL ? 'repro' : 'new');
+  { // 共有リンクの時刻と設定を反映
+    const qt = Number(QS.get('t')), qe = Number(QS.get('ease'));
+    if (qt > 0) { setDir(0); st.seek = Math.min(qt, T_MAX); }
+    if (qe > 0) { Life.cfg.ease = qe; const o = Array.from($('ease').options).find((x) => Number(x.value) === qe); if (o) $('ease').value = o.value; }
+    $('ease').onchange = (e) => { Life.cfg.ease = Number(e.target.value); toast('次に入る恒星系から、生命の生まれやすさが変わります(確率モデルの仮定を変える設定です)', 4500); };
+    $('cmpT').innerHTML = '<tr><td><b>項目</b></td><td><b>この計算</b></td><td><b>観測</b></td></tr>' + cosmo.compare().map((r) => '<tr><td>' + r.name + '<br><span style="color:var(--dim)">' + r.kind + '</span></td><td>' + r.model + '</td><td>' + r.obs + '<br><span style="color:var(--dim)">' + r.src + '</span></td></tr>').join('');
+  }
   toast(SEED_FROM_URL ? 'シード ' + SEED + ' の宇宙を再現しました' : '新しい宇宙を創りました(シード ' + SEED + ')', 3500);
 } catch (e) { fatal('初期化に失敗しました: ' + e.message); throw e; }
 window.__cosmos = { st, cosmo, cam, simulate, scenes, enterScene, findHalos, rebuild: (n) => rebuild(n), device, newUniverse, getSeed: () => SEED, logRead };

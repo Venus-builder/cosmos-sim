@@ -32,3 +32,17 @@ console.log('civ: all tests passed (' + orders.size + ' distinct orders in 6 wor
   assert.ok(splits > 0, '集団が分裂する: ' + splits);
   console.log('civ(society): splits=' + splits + ' wars=' + wars + ' tradeLinks=' + trades);
 }
+
+// ---- 感染症・気候・言語
+{
+  let epi = 0, maxDT = 0, diverged = 0;
+  for (let sd = 1; sd <= 3; sd++) {
+    const w = run(sd * 17, 25000);
+    epi += w.epidemics.length; maxDT = Math.max(maxDT, w.climate.dT);
+    assert.ok(w.climate.co2 >= 280 && Number.isFinite(w.climate.dT), '気候の値が有限');
+    assert.ok(w.epidemics.every((e) => e.dead <= e.infected), '死者は感染者以下');
+    diverged += w.state.langs.filter((l) => l.toRoot < 1).length;
+  }
+  assert.ok(epi > 0, '感染症が起きる'); assert.ok(diverged > 0, '言語が分岐する');
+  console.log('civ(epidemic/climate/lang): epidemics=' + epi + ' maxDT=' + maxDT.toFixed(2) + ' divergedLangs=' + diverged);
+}

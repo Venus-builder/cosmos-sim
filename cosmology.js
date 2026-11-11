@@ -146,7 +146,25 @@
       return { TK, TMeV, np: xn, Yp, xe, phase };
     }
 
+    // ---- 観測値との比較(観測値は公表値を手で入れた概数。出典名は目印で、最新値は各出典で確認すること)
+    function compare() {
+      let lo = 1e-4, hi = 1e-2; // Saha の式で電離度が 50% になる時期を探す
+      for (let k = 0; k < 50; k++) { const m = Math.sqrt(lo * hi), x = plasma(tOfA(m)).xe; if (x === null || x > 0.5) lo = m; else hi = m; }
+      const zAcc = Math.pow(2 * OL / Om, 1 / 3) - 1;
+      return [
+        { name: '宇宙の年齢', model: tOfA(1).toFixed(2) + ' Gyr', obs: '13.79 ± 0.02 Gyr', src: 'Planck 2018', kind: '計算' },
+        { name: 'ハッブル定数 H₀', model: (h * 100).toFixed(1) + ' km/s/Mpc', obs: '67.4 ± 0.5(CMB) / 約73(近くの銀河の距離測定)', src: 'Planck 2018 / SH0ES', kind: '入力値(測り方で食い違いが残る)' },
+        { name: '物質と放射が等しくなる赤方偏移', model: (Om / Or - 1).toFixed(0), obs: '約 3400', src: 'Planck 2018', kind: '計算' },
+        { name: '水素が半分中性になる赤方偏移', model: (1 / lo - 1).toFixed(0), obs: '最終散乱は約 1090', src: 'Planck 2018', kind: '計算(Saha式は平衡を仮定するので、実際の晴れ上がりより早く出る)' },
+        { name: 'ヘリウム4の質量比', model: plasma(2000 / 3.15576e16).Yp.toFixed(3), obs: '約 0.245', src: '低金属量の銀河の観測', kind: '計算(簡略式)' },
+        { name: '加速膨張が始まる赤方偏移', model: zAcc.toFixed(2), obs: '約 0.6〜0.7', src: 'Ia型超新星の観測', kind: '計算' },
+        { name: 'CMBの温度', model: T0.toFixed(4) + ' K', obs: '2.7255 ± 0.0006 K', src: 'COBE/FIRAS', kind: '入力値' },
+        { name: '物質の密度 Ωm', model: Om.toFixed(2), obs: '0.315 ± 0.007', src: 'Planck 2018', kind: '入力値' },
+      ];
+    }
+
     return {
+      compare,
       h, Om, Or, OL, H0, TMAX,
       H, tOfA, aOfT, lnAOfT, TdS, D, f: fGrowth, lum,
       zOfA: (a) => 1 / a - 1,

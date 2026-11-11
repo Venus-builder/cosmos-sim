@@ -175,7 +175,11 @@
     }
 
     // ---- 集団・国家・交易・戦争(個人が所属し、集団どうしの関係が個人の知識と生死に影響する)
-    const groups = [{ id: 0, name: nameOf(seed, 30000) + '族', born: 0, alive: true, leader: null }];
+    const CONCEPTS = ['水', '火', '人', '母', '太陽', '食べる', '大きい', '一', '二', '石', '獣', '夜'];
+    const PROTO = CONCEPTS.map((_, k) => [SYL[h32(seed, 6000 + k, 1) % SYL.length], SYL[h32(seed, 6000 + k, 2) % SYL.length]]); // 祖語の単語
+    const wordOf = (g, k) => (g.lang.loans[k] || PROTO[k].map((sy) => { for (const [f, t] of g.lang.shifts) if (sy === f) sy = t; return sy; })).join('');
+    const intel = (A, B) => { let n = 0; for (let k = 0; k < CONCEPTS.length; k++) if (wordOf(A, k) === wordOf(B, k)) n++; return n / CONCEPTS.length; }; // 通じる度合い(同じ単語の割合)
+    const groups = [{ id: 0, parent: -1, name: nameOf(seed, 30000) + '族', born: 0, alive: true, leader: null, lang: { shifts: [], loans: {} } }];
     const rel = new Map(); // 'a-b' → { trade, hostility, war }
     const relOf = (a, b) => { const k = a < b ? a + '-' + b : b + '-' + a; let r = rel.get(k); if (!r) { r = { a: Math.min(a, b), b: Math.max(a, b), trade: 0.1, hostility: 0.1, war: false }; rel.set(k, r); } return r; };
     const nameG = (id) => groups[id].name;
@@ -189,13 +193,15 @@
         const moving = mem.filter((a) => u01(seed, 77 + groups.length, a.lineage) < 0.5);
         if (moving.length < 20 || mem.length - moving.length < 20 || w.year - (groups[gid].lastSplit || -1e9) < 60) continue;
         groups[gid].lastSplit = w.year;
-        const ng = { id: groups.length, name: nameOf(seed, 30000 + groups.length) + (c[O] > 2.2 ? '国' : '族'), born: w.year, alive: true, leader: null };
+        const ng = { id: groups.length, parent: gid, name: nameOf(seed, 30000 + groups.length) + (c[O] > 2.2 ? '国' : '族'), born: w.year, alive: true, leader: null, lang: { shifts: groups[gid].lang.shifts.slice(), loans: Object.assign({}, groups[gid].lang.loans) } };
         groups.push(ng);
         for (const a of moving) a.grp = ng.id;
         const r = relOf(gid, ng.id); r.trade = 0.3; r.hostility = 0.15;
         w.log(w.year, 'society', '【分裂】' + nameG(gid) + ' から ' + ng.name + ' が分かれた(人口 ' + mem.length + ')');
       }
       const alive = groups.filter((g) => g.alive);
+      // 言葉は世代とともに少しずつ変わる(音の変化)。離れた集団ほど通じなくなる
+      for (const g of alive) if (rnd() < 1 - Math.exp(-dt / 350)) g.lang.shifts.push([SYL[Math.floor(rnd() * SYL.length)], SYL[Math.floor(rnd() * SYL.length)]]);
       const size = new Map(); for (const a of agents) size.set(a.grp, (size.get(a.grp) || 0) + 1);
       const crowd = w.pop / Math.max(1, w.Kcap);
       for (let i = 0; i < alive.length; i++) for (let j = i + 1; j < alive.length; j++) {
@@ -203,13 +209,14 @@
         if (na < 6 || nb < 6) continue;
         const r = relOf(A.id, B.id);
         // 交易が増えると敵意が下がり、人が増えて資源が足りなくなると敵意が上がる
-        r.trade = Math.min(1, r.trade + 0.012 * dt * (0.3 + c[T]) * (1 - r.hostility));
+        const it = intel(A, B); r.intel = it;
+        r.trade = Math.max(0, Math.min(1, r.trade + 0.0012 * dt * (0.3 + c[T]) * (1 - r.hostility) * (0.35 + 0.65 * it) - 0.0006 * dt * r.trade)); // 言葉が通じるほど交易しやすい
         r.hostility = Math.max(0, Math.min(1, r.hostility + 0.003 * dt * Math.max(0, crowd - 0.6) - 0.004 * dt * (0.3 + c[O]) * r.trade));
         if (r.war) { r.war = false; r.hostility = Math.max(0.2, r.hostility * 0.6); }
         // 交易: 知識を交換する
         if (r.trade > 0.2 && rnd() < Math.min(0.9, r.trade * 0.12 * dt)) {
           const ma = cnt.get(A.id), mb = cnt.get(B.id);
-          if (ma && mb) { const x = ma[Math.floor(rnd() * ma.length)], y = mb[Math.floor(rnd() * mb.length)]; if (y.arr.length) learn(x, y.arr[Math.floor(rnd() * y.arr.length)]); if (x.arr.length) learn(y, x.arr[Math.floor(rnd() * x.arr.length)]); }
+          if (ma && mb) { const x = ma[Math.floor(rnd() * ma.length)], y = mb[Math.floor(rnd() * mb.length)]; if (y.arr.length) learn(x, y.arr[Math.floor(rnd() * y.arr.length)]); if (x.arr.length) learn(y, x.arr[Math.floor(rnd() * x.arr.length)]); if (rnd() < 0.08) { const k = Math.floor(rnd() * CONCEPTS.length); B.lang.loans[k] = wordOf(A, k).match(/ヴァ|./g); } }
         }
         // 戦争: 敵意が高く、武器(材料・エネルギー)が進むほど起こりやすい。組織力が高いと抑えられる
         const pw = 1 - Math.exp(-dt * 0.012 * r.hostility * r.hostility * (1 + 0.25 * (c[M] + c[E])) / (1 + 0.6 * c[O] * r.trade));
@@ -227,17 +234,69 @@
       // 結婚は集団内が多く、一部は集団をまたぐ(婚姻でも知識が伝わる)。ここでは状態の記録だけ更新
       for (const g of groups) if (g.alive && !(size.get(g.id) > 0)) g.alive = false;
       w.state = {
-        nations: groups.filter((g) => g.alive).map((g) => { const m = (cnt.get(g.id) || []); const ld = m.reduce((b, a) => (a.kids.length + a.inv > (b ? b.kids.length + b.inv : -1) ? a : b), null); return { id: g.id, name: g.name, size: size.get(g.id) || 0, leader: ld ? ld.name : '—', born: g.born }; }),
-        relations: Array.from(rel.values()).filter((r) => groups[r.a].alive && groups[r.b].alive).map((r) => ({ a: nameG(r.a), b: nameG(r.b), trade: r.trade, hostility: r.hostility, kind: r.hostility > 0.45 ? '敵対' : r.trade > 0.55 ? '交易が盛ん' : '中立' })),
+        nations: groups.filter((g) => g.alive).map((g) => { const m = (cnt.get(g.id) || []); const ld = m.reduce((b, a) => (a.kids.length + a.inv > (b ? b.kids.length + b.inv : -1) ? a : b), null); return { id: g.id, name: g.name, size: size.get(g.id) || 0, leader: ld ? ld.name : '—', born: g.born, words: [0, 1, 2, 4].map((k) => CONCEPTS[k] + '=' + wordOf(g, k)).join(' ') }; }),
+        langs: groups.map((g) => ({ id: g.id, parent: g.parent, name: g.name, alive: g.alive, born: g.born, sample: wordOf(g, 0) + '・' + wordOf(g, 2), toRoot: intel(g, groups[0]) })),
+        relations: Array.from(rel.values()).filter((r) => groups[r.a].alive && groups[r.b].alive).map((r) => ({ a: nameG(r.a), b: nameG(r.b), trade: r.trade, hostility: r.hostility, intel: r.intel === undefined ? 1 : r.intel, kind: r.hostility > 0.45 ? '敵対' : r.trade > 0.55 ? '交易が盛ん' : '中立' })),
       };
     }
-    w.state = { nations: [], relations: [] };
+    w.state = { nations: [], relations: [], langs: [] };
+
+    // ---- 感染症: 新しい病気が現れ、人から人へ(同じ集団の中が多く、交易相手にも)うつる。世代ごとに個人を追う
+    w.epidemics = []; let disN = 0;
+    function epidemic(dt) {
+      const c = w.caps;
+      // 定住して家畜と暮らし、人が密集するほど、新しい病気が現れやすい
+      if (rnd() >= 1 - Math.exp(-dt * 0.0022 * (agents.length / 400) * (1 + 0.5 * Math.min(3, c[L])))) return;
+      const id = ++disN, name = nameOf(seed, 40000 + id) + '病';
+      const R0 = (1.2 + 2.4 * rnd()) * (0.6 + 0.6 * Math.min(1, agents.length / Math.max(1, w.Kcap))) / (1 + 0.08 * c[L]); // 1人が何人にうつすか(医療で下がる)
+      const mort = (0.04 + 0.45 * rnd() * rnd()) / (1 + 0.25 * c[L]);
+      const byG = new Map(); for (const a of agents) { let l = byG.get(a.grp); if (!l) byG.set(a.grp, l = []); l.push(a); }
+      const links = (g) => Array.from(rel.values()).filter((r) => (r.a === g || r.b === g) && r.trade > 0.15);
+      const first = agents[Math.floor(rnd() * agents.length)]; first.sick = id;
+      let cur = [first], infected = 1, gens = 0; const dead = [], hit = new Set([first.grp]);
+      while (cur.length && gens++ < 40) {
+        const next = [];
+        for (const a of cur) {
+          let n = Math.floor(R0); if (rnd() < R0 - n) n++;
+          for (let t = 0; t < n; t++) {
+            let pool = byG.get(a.grp);
+            if (rnd() < 0.15) { const ls = links(a.grp); if (ls.length) { const r = ls[Math.floor(rnd() * ls.length)]; if (rnd() < r.trade) pool = byG.get(r.a === a.grp ? r.b : r.a) || pool; } }
+            const b = pool[Math.floor(rnd() * pool.length)];
+            if (!b || !b.alive || b.sick === id) continue;
+            b.sick = id; next.push(b); infected++; hit.add(b.grp);
+          }
+          if (rnd() < mort * (a.age < 5 || a.age > 55 ? 1.6 : 1)) dead.push(a);
+        }
+        cur = next;
+      }
+      let died = 0;
+      for (const a of dead) { const i = agents.indexOf(a); if (i >= 0 && agents.length > 8) { kill(i, name); died++; } }
+      w.epidemics.push({ year: Math.round(w.year), name, R0, mort, infected, dead: died, groups: hit.size }); if (w.epidemics.length > 30) w.epidemics.shift();
+      if (infected >= 15) w.log(w.year, 'crisis', '【感染症】' + name + ': ' + infected + '人が感染、' + died + '人が死亡(' + hit.size + '集団に広がった・1人が約' + R0.toFixed(1) + '人にうつす)');
+      w.pop = agents.length;
+    }
+
+    // ---- 気候: エネルギー利用で CO₂ が増え、気温が上がる。科学が進むと排出の少ないエネルギーに替わる
+    // (注目する地域の人口を、惑星全体の縮図とみなした換算。数値は仮説)
+    w.climate = { co2: 280, dT: 0, emis: 0, clean: 0 };
+    function climateStep(dt) {
+      const c = w.caps, cl = w.climate;
+      const ind = Math.max(0, c[E] - 3.5);
+      cl.clean = Math.min(0.97, Math.max(0, (c[S] - 6) / 6) * 0.6 + (w.ms.nuclear !== undefined ? 0.3 : 0) + Math.min(0.2, Math.max(0, cl.dT - 1) * 0.08 * Math.min(1, c[O] / 4)));
+      cl.emis = (agents.length / 2000) * Math.pow(ind, 1.6) * (1 - cl.clean) * 1.2; // ppm/年
+      cl.co2 = Math.max(280, cl.co2 + (cl.emis - (cl.co2 - 280) / 250) * dt); // 海と陸が、ゆっくり吸収する
+      const target = 3 * Math.log2(cl.co2 / 280); // 気候感度: CO₂ が2倍で約 3℃
+      const before = cl.dT; cl.dT += (target - cl.dT) * Math.min(1, dt / 40);
+      for (const th of [1.5, 3, 5]) if (before < th && cl.dT >= th) w.log(w.year, 'crisis', '【気候】気温が +' + th + '℃ を超えた(CO₂ ' + Math.round(cl.co2) + ' ppm)。土地の実りが減る');
+      w.envClimate = Math.max(0.35, 1 - 0.09 * Math.max(0, cl.dT));
+    }
+
 
     function step(dt) {
       if (w.ended) return;
       const c = w.caps;
       w.year += dt;
-      w.Kcap = Math.min(P.maxN, P.k0 * (w.envK || 1) * Math.exp(0.9 * c[L] + 0.5 * c[E] + 0.3 * c[T] + 0.3 * c[O] + 0.2 * c[M])); // envK: 土地の実り(生態系の植物量)で変わる
+      w.Kcap = Math.min(P.maxN, P.k0 * (w.envK || 1) * (w.envClimate || 1) * Math.exp(0.9 * c[L] + 0.5 * c[E] + 0.3 * c[T] + 0.3 * c[O] + 0.2 * c[M])); // envK: 土地の実り(生態系の植物量)で変わる
       // 発明の試み(個人がそれぞれ、知っている技術を組み合わせて試す)
       const mult = 1 + 0.35 * c[I] + 0.15 * c[S] + 0.1 * c[O];
       const rate = P.attRate * (1 + (w.aliveN || 0) / 40) * mult * dt;
@@ -282,7 +341,7 @@
           agents.push(kid);
         }
       }
-      societyStep(dt);
+      societyStep(dt); epidemic(dt); climateStep(dt);
       // 死亡(寿命は生命の力で伸びる。人が多すぎると食料が足りず死亡が増える)
       const life = 58 + 25 * (1 - Math.exp(-c[L] / 4)), crowd = 0.03 * Math.max(0, agents.length / w.Kcap - 1);
       for (let i = agents.length - 1; i >= 0; i--) {
@@ -296,7 +355,8 @@
       // 危機(疫病・戦乱・災害・環境の限界)
       const load = w.pop * Math.pow(0.2 + c[E], 1.3) / (P.kLoad * loadScale) / (1 + 0.35 * c[S]);
       const dens = w.pop / P.maxN;
-      const hz = [1e-4 + 2e-4 * dens * (1 - 0.15 * c[L]), 6e-5 * (1 + c[M] + c[E]) * (1 - 0.3 * Math.min(2, c[O]) / 2), 8e-5, 0.0008 * Math.max(0, load - 1)];
+      const hz = [0 * dens, // 疫病は epidemic() で個人ごとに扱う
+         6e-5 * (1 + c[M] + c[E]) * (1 - 0.3 * Math.min(2, c[O]) / 2), 8e-5, 0.0008 * Math.max(0, load - 1)];
       const names = ['疫病の流行', '大きな戦乱', '天変地異', '環境・資源の限界'];
       for (let k = 0; k < 4; k++) if (rnd() < 1 - Math.exp(-hz[k] * dt)) {
         const sev = 0.25 + 0.55 * rnd(); let died = 0;

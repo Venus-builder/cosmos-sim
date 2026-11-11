@@ -745,13 +745,13 @@ fn nebDens(p: vec3f, sub: i32) -> vec4f {
 fn nebula(ro: vec3f, rd: vec3f) -> vec3f {
   let sub = i32(u.p0.y + 0.5);
   var col = vec3f(0.0); var T = 1.0;
-  let b = dot(ro, rd); let c = dot(ro, ro) - 6.5; let disc = b * b - c;
+  let b = dot(ro, rd); let c = dot(ro, ro) - 6.5 * u.p2.x * u.p2.x; let disc = b * b - c;
   if (disc > 0.0) {
     let t0 = max(0.0, -b - sqrt(disc)); let t1 = -b + sqrt(disc); let n = 56; let dt = (t1 - t0) / f32(n);
     for (var i = 0; i < 56; i++) {
       let p = ro + rd * (t0 + (f32(i) + 0.5) * dt);
-      let d = nebDens(p, sub);
-      col += T * d.rgb * d.w * dt * 1.7;
+      let d = nebDens(p / u.p2.x, sub);
+      col += T * d.rgb * d.w * dt * 1.7 * u.p2.y;
       T *= exp(-d.w * dt * 0.55);
       if (T < 0.02) { break; }
     }
@@ -785,7 +785,7 @@ fn globular(ro: vec3f, rd: vec3f) -> vec3f {
   else if (kind == 2) { col = pulsar(ro, rd); }
   else if (kind == 3) { col = nebula(ro, rd); }
   else if (kind == 4) { col = whiteDwarf(ro, rd); }
-  else { col = globular(ro, rd); }
+  else { col = globular(ro, rd) * (0.3 + 0.7 * u.p2.y); }
   col = 1.0 - exp(-col * 1.25);
   col = pow(clamp(col, vec3f(0.0), vec3f(1.0)), vec3f(0.95));
   return vec4f(col, 1.0);
@@ -914,7 +914,7 @@ function create(env) {
   }
   // ---- 天体の画面(ブラックホール・中性子星・星雲など)
   function enterObject(o, from) {
-    S.obj = o; S.kind = 'object'; S.clock = 0;
+    S.obj = o; S.kind = 'object'; S.clock = 0; S.objT = 0;
     if (from === 'galaxy') { if (S.stack[S.stack.length - 1] !== 'galaxy') S.stack.push('galaxy'); } else S.stack = ['cosmos'];
     const dist = { 0: 18, 1: 34, 2: 6, 3: 6.5, 4: 7, 5: 9 }[o.kind], c = cams.object;
     Object.assign(c, { az: 0.6, el: o.kind <= 1 ? 0.12 : 0.3, dist, min: o.kind <= 1 ? 3 : 1.6, max: o.kind <= 1 ? 160 : 24 });
@@ -925,16 +925,46 @@ function create(env) {
     const o = astro.makeObject(type, seed, type === 'smbh' ? { mass: 4e6 * Math.pow(10, (seed % 100) / 50) } : null);
     if (S.kind === 'galaxy') { clearLabels(); fade(() => enterObject(o, 'galaxy')); } else fade(() => enterObject(o, 'cosmos'));
   }
+  // ---- 天体の時間変化(標準的な式による近似)。T は見はじめてからの経過年数
+  const OBJ_RATE = { snr: 200, pn: 300, neb: 2e4, bh: 1e6, smbh: 2e6, ns: 1e4, magnetar: 50, wd: 1e7, gc: 1e8 }; // ×1 のとき、1秒あたりの年数
+  const fy = (y) => env.fmtYears(y);
+  function objState(o, T) {
+    const st = { scale: 1, bright: 1, rows: [['見はじめてからの時間', fy(T)]] };
+    if (o.type === 'snr') { // セドフ・テイラー解: 半径 ∝ 年齢^0.4、速さ ∝ 年齢^-0.6
+      const age = o.age + T, R = 12 * Math.pow(age / 1e4, 0.4), v = 0.4 * R * 3.086e13 / (age * 3.156e7);
+      st.scale = Math.min(2.4, Math.pow(age / o.age, 0.4)); st.bright = Math.max(0.03, Math.pow(o.age / age, 0.7));
+      st.rows.push(['いまの年齢', fy(age)], ['いまの殻の半径', R.toFixed(1) + ' パーセク'], ['いまの広がる速さ', Math.round(v) + ' km/s'], ['行く末', age > 1e5 ? '星間ガスに溶けこみ、ほとんど見えない' : '数万〜10万年で星間ガスに溶けこむ']);
+    } else if (o.type === 'pn') { // 約20 km/s で広がり、中心星が冷えるにつれて光らなくなる
+      const age = o.age + T; st.scale = Math.min(2.4, age / o.age); st.bright = Math.max(0.02, Math.exp(-(age - o.age) / 15000));
+      st.rows.push(['いまの年齢', fy(age)], ['いまの広がり', (o.Rpc * 2 * age / o.age).toFixed(2) + ' パーセク'], ['行く末', age > 30000 ? 'ガスは散り、白色矮星だけが残る' : '約2〜3万年でガスが散る']);
+    } else if (o.type === 'neb') { // 若い星の光と風で、数百万年かけてガスが吹き払われる
+      st.scale = 1 + 0.35 * Math.min(1, T / 4e6); st.bright = Math.max(0.03, Math.exp(-T / 3e6));
+      st.rows.push(['行く末', T > 6e6 ? 'ガスは吹き払われ、若い星団が残る' : '数百万年でガスが吹き払われ、星団が残る']);
+    } else if (o.type === 'bh' || o.type === 'smbh') { // 降着による成長: 質量 ∝ exp(λ t / 4500万年)。λ はエディントン限界に対する割合
+      const lam = o.type === 'smbh' ? 0.1 : 1e-4, M = o.mass * Math.exp(lam * T / 4.5e7), km = 2.953 * M;
+      st.rows.push(['いまの質量', (M >= 1e5 ? M.toExponential(2) : M.toFixed(2)) + ' M☉(降着で成長)'], ['いまの地平線の半径', km < 1e6 ? km.toFixed(1) + ' km' : (km / 1.496e8).toFixed(2) + ' AU'], ['降着の強さ', 'エディントン限界の ' + (lam * 100) + '%(仮定)']);
+    } else if (o.type === 'ns' || o.type === 'magnetar') { // 磁気双極子放射による減速: P(t) = √(P0² + 2 (B/3.2e19)² t)
+      const k = Math.pow(o.B / 3.2e19, 2), P = Math.sqrt(o.P * o.P + 2 * k * T * 3.156e7), Pd = k / P;
+      st.P = P; st.rows.push(['いまの自転周期', P < 1 ? (P * 1000).toFixed(2) + ' ミリ秒' : P.toFixed(3) + ' 秒'], ['遅くなる速さ', Pd.toExponential(1) + ' 秒/秒'], ['特性年齢', fy(P / (2 * Pd) / 3.156e7)], ['行く末', P > 5 && o.type !== 'magnetar' ? '自転が遅くなり、電波が出なくなる(パルサーの死)' : '自転が遅くなると電波が止まる']);
+    } else if (o.type === 'wd') { // メステルの冷却則: 光度 ∝ t^-1.4 → 温度 ∝ t^-0.35
+      const t0 = 3e7 * Math.pow(25000 / o.T, 2.86), Tn = o.T * Math.pow(1 + T / t0, -0.35);
+      st.T = Tn; st.rows.push(['いまの表面温度', Math.round(Tn) + ' K'], ['行く末', '何兆年もかけて冷え、光らない黒色矮星になる(まだ宇宙に存在しない)']);
+    } else if (o.type === 'gc') { // 星が少しずつ蒸発して逃げる(緩和時間の数十倍で消える)
+      const N = Math.round(o.N * Math.max(0.02, 1 - T / 4e10)); st.bright = Math.max(0.1, N / o.N);
+      st.rows.push(['いまの星の数', N.toLocaleString() + ' 個'], ['行く末', '星が少しずつ逃げ、数百億年で散る']);
+    }
+    return st;
+  }
   function objectFrame(dt, W, H) {
-    const o = S.obj, cam = cams.object;
+    const o = S.obj, cam = cams.object, os = S.objSt = objState(o, S.objT || 0);
     const ev = eyeOf(cam), el = Math.hypot(...ev), fwd = [-ev[0] / el, -ev[1] / el, -ev[2] / el];
     let right = [-fwd[2], 0, fwd[0]]; const rl = Math.hypot(right[0], right[2]) || 1; right = [right[0] / rl, 0, right[2] / rl];
     const up = cross3(right, fwd), t = performance.now() / 1000;
-    const omega = o.P ? 2 * Math.PI / Math.min(8, Math.max(1.2, o.P)) : 3;
+    const omega = o.P ? 2 * Math.PI / Math.min(12, Math.max(1.2, os.P || o.P)) : 3;
     const u = new Float32Array(28);
     u.set([...fwd, W / H], 0); u.set([...right, 0.5], 4); u.set([...up, cam.dist], 8); u.set([...ev, t], 12);
     u.set([o.kind, o.sub || 0, (o.seed % 1000) / 10, o.spin || 0], 16);
-    u.set([omega, o.tilt || 0.7, o.T || 20000, o.pulsar ? 1 : 0], 20); u.set([1, 1, 1, 0], 24);
+    u.set([omega, o.tilt || 0.7, os.T || o.T || 20000, o.pulsar ? 1 : 0], 20); u.set([os.scale, os.bright, 1, 0], 24);
     device.queue.writeBuffer(objU, 0, u);
   }
   function specOf(i) {
@@ -1319,7 +1349,7 @@ function create(env) {
   function surfaceFrame(dt, W, H) {
     const p = S.pl, sf = S.sf, cam = cams.surface, R = p.radiusE * 6371;
     const fi = (S.walk || 0) + (keys.w || keys.arrowup ? 1 : 0) - (keys.s || keys.arrowdown ? 1 : 0);
-    const si = (keys.d || keys.arrowright ? 1 : 0) - (keys.a || keys.arrowleft ? 1 : 0);
+    const si = (S.strafe || 0) + (keys.d || keys.arrowright ? 1 : 0) - (keys.a || keys.arrowleft ? 1 : 0);
     const spd = 0.05 * (keys.shift ? 12 : 1) * dt, hd = cam.az;
     const clampW = (v) => Math.max(-600, Math.min(600, v));
     sf.wx = clampW(sf.wx + (Math.sin(hd) * fi + Math.cos(hd) * si) * spd);
@@ -1373,7 +1403,7 @@ function create(env) {
     }
   }
   function speedText(mult) {
-    if (S.kind === 'object') return '天体の動き(見やすいよう実際より遅い)';
+    if (S.kind === 'object') return '1秒 = ' + env.fmtYears(mult * (OBJ_RATE[S.obj.type] || 1)) + '(天体の変化。回転は見やすい速さ)';
     if (S.kind === 'galaxy') return '1秒 = ' + (mult * 10).toFixed(mult >= 10 ? 0 : 1) + '百万年(銀河の回転)';
     if (S.kind === 'system') return '1秒 = ' + (mult * 0.2).toFixed(2) + '年(公転)';
     return '1秒 = ' + (mult * 2).toFixed(1) + '時間(自転)';
@@ -1398,7 +1428,7 @@ function create(env) {
     const g = S.gal, sys = S.sys, p = S.pl;
     const crumb = ['宇宙'];
     if (S.kind === 'object') {
-      const o = S.obj; return { crumb: S.stack.includes('galaxy') ? ['宇宙', '銀河', o.jp.split('(')[0]] : ['宇宙', o.jp.split('(')[0]], era: 'ドラッグで回り込み、ホイール/ピンチで近づく・離れる。実在する物理の式で計算した値と、その見え方です', big: o.icon + ' ' + o.jp, rows: o.rows };
+      const o = S.obj; return { crumb: S.stack.includes('galaxy') ? ['宇宙', '銀河', o.jp.split('(')[0]] : ['宇宙', o.jp.split('(')[0]], era: 'ドラッグで回り込み、ホイール/ピンチで近づく・離れる。実在する物理の式で計算した値と、その見え方です', big: o.icon + ' ' + o.jp, rows: [...(S.objSt ? S.objSt.rows : []), ...o.rows] };
     }
     if (S.kind === 'galaxy') {
       crumb.push('銀河');
@@ -1431,7 +1461,7 @@ function create(env) {
   function flyMove(dt) {
     const cam = cams[S.kind]; if (!cam || !cam.fly) return;
     const f = fwdOf(cam), r = [Math.cos(cam.az), 0, -Math.sin(cam.az)];
-    const fi = (S.walk || 0) + (keys.w || keys.arrowup ? 1 : 0) - (keys.s || keys.arrowdown ? 1 : 0), si = (keys.d || keys.arrowright ? 1 : 0) - (keys.a || keys.arrowleft ? 1 : 0), vi = (keys.e || keys[' '] ? 1 : 0) - (keys.q ? 1 : 0);
+    const fi = (S.walk || 0) + (keys.w || keys.arrowup ? 1 : 0) - (keys.s || keys.arrowdown ? 1 : 0), si = (S.strafe || 0) + (keys.d || keys.arrowright ? 1 : 0) - (keys.a || keys.arrowleft ? 1 : 0), vi = (S.vert || 0) + (keys.e || keys[' '] ? 1 : 0) - (keys.q ? 1 : 0);
     const sp = (S.kind === 'galaxy' ? 0.5 : 2.5) * (cam.spd || 1) * (keys.shift ? 5 : 1) * dt;
     for (let k = 0; k < 3; k++) cam.pos[k] += f[k] * fi * sp + r[k] * si * sp + (k === 1 ? vi * sp : 0);
   }
@@ -1447,6 +1477,7 @@ function create(env) {
     if (dir !== 0) {
       if (S.kind === 'galaxy') S.clock += dir * mult * 10 * dtReal;
       else if (S.kind === 'system') S.clock += dir * mult * 0.2 * dtReal;
+      else if (S.kind === 'object') S.objT = Math.max(0, (S.objT || 0) + dir * mult * (OBJ_RATE[S.obj.type] || 1) * dtReal);
       else { S.clock += dir * mult * 2 * dtReal; S.worldYears = Math.max(0, S.worldYears + dir * mult * 2 * dtReal / 8760); }
       if (S.kind === 'surface' && S.eco && S.worldYears > (S.ecoLog || 0)) {
         const delta = S.worldYears - (S.ecoLog || 0);
@@ -1498,7 +1529,7 @@ function create(env) {
   return {
     get kind() { return S.kind; }, active, curCam, enterGalaxy, enterSun, back, onTap, frame, speedText,
     canBack: () => S.stack.length > 0, enterPlanet, labelsRef: () => S.labels,
-    getSystem: () => S.sys, getPlanet: () => S.pl, planetIndex: () => S.plIdx, eco: () => S.eco, worldTime: () => S.worldYears, ecoLag: () => (S.eco ? Math.max(0, S.worldYears - (S.ecoLog || 0)) : 0), setHumanLoad: (x) => { if (S.eco) S.eco.cover = (S.eco.baseCover || 0.85) * (1 - 0.6 * Math.max(0, Math.min(1, x))); }, ecoEvent: (k) => { if (S.eco) S.eco.event(k, 0.6 + 0.3 * Math.random()); }, setFly, flying: () => { const c = cams[S.kind]; return !!(c && c.fly); }, viewObject, nearby: () => S.near || [], follow: (k) => { S.follow = (S.follow === k ? null : k); }, following: () => S.follow, scanLife, flyTo, land: () => land(null), setWalk: (v) => { S.walk = v; },
+    getSystem: () => S.sys, getPlanet: () => S.pl, planetIndex: () => S.plIdx, eco: () => S.eco, worldTime: () => S.worldYears, ecoLag: () => (S.eco ? Math.max(0, S.worldYears - (S.ecoLog || 0)) : 0), setHumanLoad: (x) => { S.humanLoad = Math.max(0, Math.min(1, x)); if (S.eco) S.eco.cover = (S.eco.baseCover || 0.85) * (1 - 0.6 * S.humanLoad) * Math.max(0.35, 1 - 0.09 * Math.max(0, S.dT || 0)); }, setClimate: (dT) => { S.dT = dT; }, ecoEvent: (k) => { if (S.eco) S.eco.event(k, 0.6 + 0.3 * Math.random()); }, setFly, flying: () => { const c = cams[S.kind]; return !!(c && c.fly); }, viewObject, nearby: () => S.near || [], follow: (k) => { S.follow = (S.follow === k ? null : k); }, following: () => S.follow, scanLife, flyTo, land: () => land(null), setWalk: (v) => { S.walk = v; }, setMove: (f, s2) => { S.walk = f; S.strafe = s2; }, setVert: (v) => { S.vert = v; },
     dbg: () => ({ crCount, fauna: (S.fauna||[]).map((x) => x.kind + ':' + x.size.toFixed(4)).join(' '), h: terrainH(S.sf.s0, S.pl.seed || 1), sea: 0.3 + 0.4 * (S.pl.water || 0), seed: S.pl.seed, kind: S.pl.kind, s0: S.sf.s0 }),
     civTarget: () => (S.pl && S.pl.bio && S.pl.bio.intelligent && S.sys ? { key: S.sys.seed + ':' + S.pl.name, name: S.pl.name, real: !!S.pl.bio.real, seed: Math.floor((S.pl.seed || 1) * 1000) } : null),
     cosmosReturn: () => { S.kind = 'cosmos'; S.stack = []; clearLabels(); },
