@@ -300,6 +300,24 @@ fn skyCol(rd: vec3f, Ls: vec3f, withDisk: bool) -> vec3f {
   return c;
 }
 
+@group(0) @binding(2) var shTex: texture_depth_2d;
+@group(0) @binding(3) var shSmp: sampler_comparison;
+// 太陽から見た座標(足元を中心に ±0.32km の範囲)。p は足元の地面を原点とする位置[km]
+fn lightPos(p: vec3f) -> vec3f {
+  let L = normalize(u.L.xyz);
+  let ax = select(vec3f(0.0, 1.0, 0.0), vec3f(0.0, 0.0, 1.0), abs(L.y) > 0.99);
+  let r = normalize(cross(ax, L)); let up = cross(L, r);
+  return vec3f(dot(p, r) / 0.32, dot(p, up) / 0.32, 0.5 - dot(p, L) / 1.6);
+}
+fn objShadow(p: vec3f) -> f32 {
+  if (u.L.y <= 0.03 || u.y.w < 0.5) { return 1.0; }
+  let lp = lightPos(p);
+  if (abs(lp.x) > 0.98 || abs(lp.y) > 0.98 || lp.z < 0.0 || lp.z > 1.0) { return 1.0; }
+  let uv = vec2f(lp.x * 0.5 + 0.5, 0.5 - lp.y * 0.5); let e = 1.0 / 2048.0; let zr = lp.z - 0.0005;
+  var sh = textureSampleCompareLevel(shTex, shSmp, uv + vec2f(-e, -e), zr) + textureSampleCompareLevel(shTex, shSmp, uv + vec2f(e, -e), zr)
+         + textureSampleCompareLevel(shTex, shSmp, uv + vec2f(-e, e), zr) + textureSampleCompareLevel(shTex, shSmp, uv + vec2f(e, e), zr);
+  return mix(0.28, 1.0, sh * 0.25);
+}
 struct FO { @location(0) col: vec4f, @builtin(frag_depth) depth: f32 };
 @fragment fn fs(i: PO) -> FO {
   let uv = i.uv * 2.0 - 1.0;
@@ -307,7 +325,7 @@ struct FO { @location(0) col: vec4f, @builtin(frag_depth) depth: f32 };
   let Ls = normalize(u.L.xyz);
   let atmD = u.atm.w;
   let kind = i32(u.w.w + 0.5);
-  let E0 = u.y.z; // 足元の標高(CPU で計算した値。立体物の高さと必ず一致させるため)
+  let E0 = elevAt(u.w.xy, 5); // 足元の標高(立体物も GPU の同じ式で地面に置く)
   var depth = 1.0;
   let ro = vec3f(0.0, u.u.w, 0.0);
   var col = skyCol(rd, Ls, true);
@@ -342,6 +360,7 @@ struct FO { @location(0) col: vec4f, @builtin(frag_depth) depth: f32 };
     let gx = gH(q + vec2f(eps, 0.0), oct) - gH(q - vec2f(eps, 0.0), oct);
     let gz = gH(q + vec2f(0.0, eps), oct) - gH(q - vec2f(0.0, eps), oct);
     var n = normalize(vec3f(-gx, 2.0 * eps, -gz));
+    let n0 = n; // 細かい凹凸を足す前の、地形そのものの向き(傾きの判定に使う)
     let xzW = u.w.xy + q;
     let h = macroH(xzW);
     let mo = macroM(xzW);
@@ -357,13 +376,27 @@ struct FO { @location(0) col: vec4f, @builtin(frag_depth) depth: f32 };
     var lit = vec3f(0.0);
     if (water) {
       let wv = vec2f(noise3(vec3f(xzW * 25.0, u.L.w * 0.6)), noise3(vec3f(xzW * 25.0 + 7.0, u.L.w * 0.6 + 3.0))) - 0.5;
-      let wn = normalize(vec3f(wv.x * 0.2, 1.0, wv.y * 0.2));
+      let wv2 = vec2f(noise3(vec3f(xzW * 160.0, u.L.w * 1.4)), noise3(vec3f(xzW * 160.0 + 5.0, u.L.w * 1.4 + 2.0))) - 0.5;
+      let wn = normalize(vec3f(wv.x * 0.2 + wv2.x * 0.1 * near, 1.0, wv.y * 0.2 + wv2.y * 0.1 * near));
       let fres = 0.03 + 0.97 * pow(1.0 - max(dot(wn, -rd), 0.0), 5.0);
       let rr = reflect(rd, wn);
-      let refl = skyCol(vec3f(rr.x, abs(rr.y), rr.z), Ls, true);
+      let rdr = normalize(vec3f(rr.x, abs(rr.y) + 0.015, rr.z));
+      var refl = skyCol(rdr, Ls, true);
+      var tr = 0.02; // 映り込み: 反射した視線を粗く進めて、陸にぶつかったら陸の色を映す
+      for (var k = 0; k < 16; k++) {
+        let pr = p + rdr * tr;
+        if (pr.y < gH(pr.xz, 2) - E0) {
+          let landC = select(vec3f(0.42, 0.36, 0.3), mix(u.z.yzw, vec3f(0.4, 0.38, 0.33), 0.4), u.m.y > 0.5 && kind == 0);
+          refl = mix(landC * (0.2 + 0.8 * max(Ls.y, 0.0)) * day, skyCol(normalize(vec3f(rdr.x, 0.02, rdr.z)), Ls, false), 1.0 - exp(-tr * 0.06 * atmD));
+          break;
+        }
+        tr *= 1.55;
+      }
       let depth = clamp((u.nb.w - h) * 7.0, 0.0, 1.0);
       let wcol = mix(vec3f(0.05, 0.34, 0.5), vec3f(0.01, 0.06, 0.2), depth);
-      lit = wcol * (0.05 + 0.9 * max(Ls.y, 0.0)) * day + refl * fres;
+      lit = wcol * (0.05 + 0.9 * max(Ls.y, 0.0)) * day * objShadow(p) + refl * fres;
+      let shore = 1.0 - smoothstep(0.0, 0.005, u.nb.w - h);
+      lit += vec3f(0.92) * shore * (0.25 + 0.5 * noise3(vec3f(xzW * 300.0, u.L.w * 2.0))) * 0.5 * (0.15 + 0.85 * day);
     } else {
       if (u.m.z > 0.5 && h < u.nb.w) { alb = vec3f(0.85, 0.92, 0.98); }
       else if (kind == 0) {
@@ -373,9 +406,19 @@ struct FO { @location(0) col: vec4f, @builtin(frag_depth) depth: f32 };
           alb = mix(alb, alb * 0.55, smoothstep(0.12, 0.3, h - u.nb.w));
         } else { alb = mix(vec3f(0.5, 0.36, 0.26), vec3f(0.66, 0.54, 0.4), mo); }
         alb *= 0.82 + 0.36 * micro;
+        { // 草むら・岩肌・砂浜を描き分ける
+          let slope = 1.0 - n0.y;
+          let rockC = mix(vec3f(0.34, 0.31, 0.28), vec3f(0.52, 0.48, 0.42), fbm3(vec3f(xzW * 9.0, el * 30.0), 3)) * (0.85 + 0.3 * micro);
+          let patchy = noise3(vec3f(xzW * 55.0, 5.0)); let blade = noise3(vec3f(xzW * 1400.0, 2.0));
+          alb *= (0.84 + 0.32 * patchy) * mix(1.0, 0.72 + 0.56 * blade, near);
+          alb = mix(alb, rockC, smoothstep(0.08, 0.26, slope));
+          if (u.m.z > 0.5) { alb = mix(vec3f(0.8, 0.72, 0.52) * (0.9 + 0.2 * micro), alb, smoothstep(0.0012, 0.005, el)); } // 海抜数mまでは砂浜
+        }
         alb = mix(alb, vec3f(0.95), 1.0 - smoothstep(262.0, 272.0, T));
       }
-      else if (kind == 6) { alb = mix(vec3f(0.62, 0.34, 0.2), vec3f(0.78, 0.5, 0.3), mo) * (0.8 + 0.4 * micro2) * (0.9 + 0.2 * micro); }
+      else if (kind == 6) { alb = mix(vec3f(0.62, 0.34, 0.2), vec3f(0.78, 0.5, 0.3), mo) * (0.8 + 0.4 * micro2) * (0.9 + 0.2 * micro);
+        alb *= 1.0 + 0.07 * sin((xzW.x * 0.8 + xzW.y * 0.6 + 0.004 * micro2) * 6000.0) * near; // 風紋
+        alb = mix(alb, vec3f(0.42, 0.3, 0.24) * (0.8 + 0.4 * micro), smoothstep(0.1, 0.3, 1.0 - n0.y)); }
       else if (kind == 2) {
         alb = vec3f(0.06, 0.045, 0.045) * (0.6 + h) * (0.8 + 0.4 * micro);
         let crack = 1.0 - smoothstep(0.0, 0.07, abs(fbm3(vec3f(xzW * 1.2, u.w.z), 4) - 0.5));
@@ -384,6 +427,7 @@ struct FO { @location(0) col: vec4f, @builtin(frag_depth) depth: f32 };
       else if (kind == 3) { alb = mix(vec3f(0.78, 0.88, 0.96), vec3f(0.55, 0.7, 0.85), h) * (0.9 + 0.2 * micro); }
       else if (kind == 5) { alb = vec3f(0.5, 0.32, 0.2) * (0.7 + 0.5 * micro2); }
       else { alb = vec3f(0.34 + 0.3 * h) * (0.8 + 0.35 * micro) * mix(1.0, 0.6, smoothstep(0.45, 0.55, fbm3(vec3f(xzW * 0.5, u.w.z), 3))); }
+      if (kind != 0 && kind != 6 && kind != 2) { alb *= 1.0 - 0.3 * smoothstep(0.1, 0.35, 1.0 - n0.y) + 0.12 * sin(el * 140.0 + micro2 * 3.0) * smoothstep(0.1, 0.3, 1.0 - n0.y); } // 崖は暗く、地層の縞
       let lvlU = i32(u.y.x + 0.5);
       if (lvlU >= 1) { // 文明の段階に応じた道: 主要な道(間隔が広い)と、町の中の細かい道
         let w2 = xzW + (vec2f(noise3(vec3f(xzW * 1.3, 7.0)), noise3(vec3f(xzW * 1.3 + 4.0, 8.0))) - 0.5) * 0.12;
@@ -409,7 +453,7 @@ struct FO { @location(0) col: vec4f, @builtin(frag_depth) depth: f32 };
           ts *= 1.7;
         }
       }
-      let direct = max(dot(n, Ls), 0.0) * smoothstep(-0.02, 0.05, Ls.y) * ext * shadow;
+      let direct = max(dot(n, Ls), 0.0) * smoothstep(-0.02, 0.05, Ls.y) * ext * shadow * objShadow(p);
       let amb = (u.atm.xyz * atmD * 0.35 + 0.012) * day + vec3f(0.022, 0.027, 0.04);
       lit = alb * (u.sc.xyz * tint * 1.25 * direct + amb * (0.55 + 0.45 * n.y)) + emis;
     }
@@ -426,7 +470,8 @@ struct FO { @location(0) col: vec4f, @builtin(frag_depth) depth: f32 };
 // 立体物: 箱・球・円すいの組み合わせで、建物・木・動物・人を作る。奥行き(深度)で地形の向こうは隠れる。
 // cr(部品1つにつき4つ): a=(基準の東, 基準の標高, 基準の北, 向き) b=(位置のずれxyz, 回す角度) c=(大きさxyz, 回し方) d=(色, 形*10+材質)
 struct MO { @builtin(position) p: vec4f, @location(0) n: vec3f, @location(1) lp: vec3f, @location(2) @interpolate(flat) col: vec4f, @location(3) wp: vec3f, @location(4) ln: vec3f };
-@vertex fn vsM(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> MO {
+struct MG { wpos: vec3f, wn: vec3f, lp: vec3f, ln: vec3f, col: vec4f };
+fn meshGeo(vi: u32, ii: u32) -> MG {
   let a = cr[ii * 4u]; let b = cr[ii * 4u + 1u]; let c = cr[ii * 4u + 2u]; let d = cr[ii * 4u + 3u];
   let prim = i32(d.w / 10.0 + 0.01);
   var v = vec3f(0.0); var n = vec3f(0.0, 1.0, 0.0);
@@ -436,8 +481,8 @@ struct MO { @builtin(position) p: vec4f, @location(0) n: vec3f, @location(1) lp:
     v[ax] = sg; v[(ax + 1u) % 3u] = cc.x; v[(ax + 2u) % 3u] = cc.y;
     n = vec3f(0.0); n[ax] = sg;
   } else if (prim == 1) { // 球(経度10×緯度6 = 360頂点)
-    let qd = vi / 6u; let cc = qc[vi % 6u] * 0.5 + 0.5; let iu = f32(qd % 10u); let iv = f32(qd / 10u);
-    let th = (iv + cc.y) / 6.0 * 3.14159265; let ph = (iu + cc.x) / 10.0 * 6.2831853;
+    let qd = vi / 6u; let cc = qc[vi % 6u] * 0.5 + 0.5; let iu = f32(qd % 8u); let iv = f32(qd / 8u);
+    let th = (iv + cc.y) / 5.0 * 3.14159265; let ph = (iu + cc.x) / 8.0 * 6.2831853;
     v = vec3f(sin(th) * cos(ph), cos(th), sin(th) * sin(ph)); n = v;
   } else { // 円すい(8面: 側面24 + 底面24 = 48頂点)。頂点は上(+1)、底は下(-1)
     let tr = vi / 3u; let k = vi % 3u; let side = tr < 8u; let j = f32(tr % 8u);
@@ -458,15 +503,23 @@ struct MO { @builtin(position) p: vec4f, @location(0) n: vec3f, @location(1) lp:
   let sy = sin(a.w); let cy = cos(a.w);
   let X = vec3f(sy, 0.0, cy); let Z = vec3f(cy, 0.0, -sy);
   let q = a.xz - u.w.xy;
-  let base = vec3f(q.x, a.y - u.y.z - dot(q, q) / (2.0 * u.s0.w), q.y);
+  let base = vec3f(q.x, gH(q, 5) - elevAt(u.w.xy, 5) + a.y, q.y); // 地面の高さは地形と同じ式で GPU が計算する(a.y は地面からの高さ)
   let wpos = base + X * l.x + vec3f(0.0, l.y, 0.0) + Z * l.z;
   let wn = normalize(X * ln.x + vec3f(0.0, ln.y, 0.0) + Z * ln.z);
-  let vv = wpos - vec3f(0.0, u.u.w, 0.0);
+  var g: MG; g.wpos = wpos; g.wn = wn; g.lp = v * c.xyz; g.ln = n; g.col = d; return g;
+}
+@vertex fn vsM(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> MO {
+  let g = meshGeo(vi, ii);
+  let vv = g.wpos - vec3f(0.0, u.u.w, 0.0);
   let cz = dot(vv, u.f.xyz); let cx = dot(vv, u.r.xyz); let cyy = dot(vv, u.u.xyz);
   var o: MO;
   o.p = vec4f(cx / (u.f.w * u.r.w), cyy / u.r.w, cz - 0.0003, cz);
-  o.n = wn; o.lp = v * c.xyz; o.col = d; o.wp = vv; o.ln = n;
+  o.n = g.wn; o.lp = g.lp; o.col = g.col; o.wp = vv; o.ln = g.ln;
   return o;
+}
+@vertex fn vsS(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> @builtin(position) vec4f {
+  let g = meshGeo(vi, ii); let lp = lightPos(g.wpos);
+  return vec4f(lp.x, lp.y, clamp(lp.z, 0.0, 1.0), 1.0);
 }
 @fragment fn fsM(i: MO) -> @location(0) vec4f {
   let Ls = normalize(u.L.xyz); let atmD = u.atm.w;
@@ -486,12 +539,14 @@ struct MO { @builtin(position) p: vec4f, @location(0) n: vec3f, @location(1) lp:
     }
   } else if (mat == 2) { // 葉: むら
     alb *= 0.72 + 0.56 * noise3(i.wp * 900.0 + i.lp * 2000.0);
+  } else if (mat == 4) { // 明かり(街灯など): 夜に光る
+    emis = alb * (1.0 - day) * 2.6;
   } else if (mat == 3) { // 生き物: 腹側を少し明るく
     alb *= 0.85 + 0.25 * clamp(-n.y, 0.0, 1.0) + 0.1 * noise3(i.lp * 9000.0);
   }
   let ext = select(1.0, smoothstep(-0.03, 0.14, Ls.y), atmD > 0.0);
   let tint = mix(vec3f(1.0), mix(vec3f(1.0, 0.5, 0.25), vec3f(1.0), smoothstep(0.0, 0.3, Ls.y)), min(atmD, 1.0));
-  let direct = max(dot(n, Ls), 0.0) * smoothstep(-0.02, 0.05, Ls.y) * ext;
+  let direct = max(dot(n, Ls), 0.0) * smoothstep(-0.02, 0.05, Ls.y) * ext * objShadow(i.wp + vec3f(0.0, u.u.w, 0.0) + n * 0.0004);
   let amb = (u.atm.xyz * atmD * 0.35 + 0.012) * day + vec3f(0.022, 0.027, 0.04);
   var lit = alb * (u.sc.xyz * tint * 1.25 * direct + amb * (0.6 + 0.4 * n.y)) + emis;
   let fa = 1.0 - exp(-dist * (0.05 + select(0.0, 0.5, i32(u.w.w + 0.5) == 5)) * atmD);
@@ -740,12 +795,14 @@ function create(env) {
   const galPipe = device.createRenderPipeline({ layout: galL.p, vertex: { module: galMod, entryPoint: 'vs' }, fragment: { module: galMod, entryPoint: 'fs', targets: [{ format, blend: additive }] } });
   const sprPipe = device.createRenderPipeline({ layout: sprL.p, vertex: { module: sprMod, entryPoint: 'vs' }, fragment: { module: sprMod, entryPoint: 'fs', targets: [{ format, blend: premul }] } });
   const plPipe = device.createRenderPipeline({ layout: plL.p, vertex: { module: plMod, entryPoint: 'vs' }, fragment: { module: plMod, entryPoint: 'fs', targets: [{ format }] } });
-  const surfPipe = device.createRenderPipeline({ layout: plL.p, vertex: { module: surfMod, entryPoint: 'vs' }, fragment: { module: surfMod, entryPoint: 'fs', targets: [{ format }] }, depthStencil: { format: 'depth32float', depthWriteEnabled: true, depthCompare: 'always' } });
+  const surfL2 = mkLayout([{ binding: 0, visibility: V | F, buffer: { type: 'uniform' } }, { binding: 1, visibility: V, buffer: { type: 'read-only-storage' } }, { binding: 2, visibility: F, texture: { sampleType: 'depth' } }, { binding: 3, visibility: F, sampler: { type: 'comparison' } }]);
+  const surfPipe = device.createRenderPipeline({ layout: surfL2.p, vertex: { module: surfMod, entryPoint: 'vs' }, fragment: { module: surfMod, entryPoint: 'fs', targets: [{ format }] }, depthStencil: { format: 'depth32float', depthWriteEnabled: true, depthCompare: 'always' } });
   const objPipe = device.createRenderPipeline({ layout: plL.p, vertex: { module: objMod, entryPoint: 'vs' }, fragment: { module: objMod, entryPoint: 'fs', targets: [{ format }] } });
   const objU = device.createBuffer({ size: 112, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
   const objBG = device.createBindGroup({ layout: plL.b, entries: [{ binding: 0, resource: { buffer: objU } }] });
   const surfCL = mkLayout([{ binding: 0, visibility: V | F, buffer: { type: 'uniform' } }, { binding: 1, visibility: V, buffer: { type: 'read-only-storage' } }]);
-  const crPipe = device.createRenderPipeline({ layout: surfCL.p, vertex: { module: surfMod, entryPoint: 'vsM' }, fragment: { module: surfMod, entryPoint: 'fsM', targets: [{ format }] }, primitive: { topology: 'triangle-list', cullMode: 'none' }, depthStencil: { format: 'depth32float', depthWriteEnabled: true, depthCompare: 'less' } });
+  const shPipe = device.createRenderPipeline({ layout: surfCL.p, vertex: { module: surfMod, entryPoint: 'vsS' }, primitive: { topology: 'triangle-list', cullMode: 'none' }, depthStencil: { format: 'depth32float', depthWriteEnabled: true, depthCompare: 'less', depthBias: 2, depthBiasSlopeScale: 2 } });
+  const crPipe = device.createRenderPipeline({ layout: surfL2.p, vertex: { module: surfMod, entryPoint: 'vsM' }, fragment: { module: surfMod, entryPoint: 'fsM', targets: [{ format }] }, primitive: { topology: 'triangle-list', cullMode: 'none' }, depthStencil: { format: 'depth32float', depthWriteEnabled: true, depthCompare: 'less' } });
   const U = GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, ST = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST;
   const galU = device.createBuffer({ size: 96, usage: U }), sprU = device.createBuffer({ size: 80, usage: U }), plU = device.createBuffer({ size: 192, usage: U });
   const plBG = device.createBindGroup({ layout: plL.b, entries: [{ binding: 0, resource: { buffer: plU } }] });
@@ -753,6 +810,9 @@ function create(env) {
   const surfBG = device.createBindGroup({ layout: plL.b, entries: [{ binding: 0, resource: { buffer: surfU } }] });
   const MAXC = 9000, crBuf = device.createBuffer({ size: MAXC * 64, usage: ST }); // 立体の部品の上限
   const crBG = device.createBindGroup({ layout: surfCL.b, entries: [{ binding: 0, resource: { buffer: surfU } }, { binding: 1, resource: { buffer: crBuf } }] });
+  const shTex = device.createTexture({ size: [2048, 2048], format: 'depth32float', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC });
+  const shSmp = device.createSampler({ compare: 'less', magFilter: 'linear', minFilter: 'linear' });
+  const surfBG2 = device.createBindGroup({ layout: surfL2.b, entries: [{ binding: 0, resource: { buffer: surfU } }, { binding: 1, resource: { buffer: crBuf } }, { binding: 2, resource: shTex.createView() }, { binding: 3, resource: shSmp }] });
   let crCount = 0, crN = [0, 0, 0], depthTex = null, depthW = 0, depthH = 0;
   const depthView = () => { if (!depthTex || depthW !== canvas.width || depthH !== canvas.height) { if (depthTex) depthTex.destroy(); depthW = canvas.width; depthH = canvas.height; depthTex = device.createTexture({ size: [depthW, depthH], format: 'depth32float', usage: GPUTextureUsage.RENDER_ATTACHMENT }); } return depthTex.createView(); };
   let galBufs = null, galBG = null, sprBuf = null, sprBG = null, sprCap = 0;
@@ -1196,7 +1256,7 @@ function create(env) {
     const x = v[0], z = v[1], s = v[2], kind = v[3], c1 = [v[4], v[5], v[6]], c2 = [v[8], v[9], v[10]], ph = v[11], yaw = v[12], hab = v[13], alt = v[14];
     const [el, wet] = elevJS(x, z);
     if ((hab === 0 && wet) || (hab === 1 && !wet)) return;
-    const y = hab === 1 ? -0.12 * s : el + alt, P = (prim, ox, oy, oz, sx, sy, sz, col, rot, mode) => part(out, prim, x, y, z, yaw, s, ox, oy, oz, sx, sy, sz, col, 3, rot, mode);
+    const y = hab === 1 ? -0.12 * s : alt, P = (prim, ox, oy, oz, sx, sy, sz, col, rot, mode) => part(out, prim, x, y, z, yaw, s, ox, oy, oz, sx, sy, sz, col, 3, rot, mode);
     const legs = (xs, hy, len, th, zs) => { let k = 0; for (const lx of xs) for (const lz of [-zs, zs]) { P(0, lx, hy, lz, th, len / 2, th, c2, 0.5 * Math.sin(ph * 3 + k * Math.PI + lx * 3), 1); k++; } };
     if (kind === 0) {
       const plan = Math.floor(v[7] / 10);
@@ -1212,7 +1272,7 @@ function create(env) {
   }
   function buildCreatures(sf, tsec) {
     const p = S.pl, F = S.fauna || [], by = (k) => F.filter((x) => x.kind === k), list = [], out = [[], [], []];
-    const stat = (x, z, fn) => { const [el, wet] = elevJS(x, z); if (!wet) fn(el); }; // 動かない物(木・建物): 陸の上だけ
+    const stat = (x, z, fn) => { const wet = elevJS(x, z)[1]; if (!wet) fn(0); }; // 動かない物(木・建物): 陸の上だけ
     const eco = S.eco, pfac = eco ? 0.25 + 0.75 * Math.min(1, eco.plantFrac()) : 1;
     const plants = by(3), animals = eco ? by(0).filter(x => eco.species.some(q => q.vis.name === x.name && q.ext === null && q.count > 0)) : by(0), birds = eco ? by(1).filter(x => eco.species.some(q => q.vis.name === x.name && q.ext === null && q.count > 0)) : by(1), fish = by(2), people = by(4), lvl = S.civNow || 0;
     const cell = 0.04, R = 7, seed = Math.floor((p.seed || 1) * 1000) | 0;
@@ -1247,17 +1307,38 @@ function create(env) {
         if (lvl >= 1 && people.length) {
           const wall = [[0.62, 0.5, 0.36], [0.72, 0.68, 0.6], [0.55, 0.58, 0.62], [0.7, 0.74, 0.78]], roof = [[0.42, 0.3, 0.16], [0.55, 0.25, 0.2], [0.3, 0.3, 0.32], [0.3, 0.35, 0.4]];
           const cx = (ci + 0.5) * cell * 0.8, cz = (cj + 0.5) * cell * 0.8, town = smoothstep01(0.5, 0.62, noise3js(cx, cz, 11)), core = smoothstep01(0.6, 0.7, noise3js(cx, cz, 11));
-          const bld = (lv, prob, size, k) => { if (lvl < lv + 1 || r(k) >= prob) return; const x = X(k + 1), z = Z(k + 1), sz = size * (0.8 + 0.4 * r(k + 2)), yaw = r(k + 3) < 0.5 ? 0 : 1.5708;
-            stat(x, z, (el) => { const Q = (prim, ox, oy, oz, sx, sy, s2, col, mat) => part(o2, prim, x, el, z, yaw, sz, ox, oy, oz, sx, sy, s2, col, mat);
-              if (lv === 0) { Q(0, 0, 0.3, 0, 0.45, 0.3, 0.45, wall[0], 0); Q(2, 0, 0.82, 0, 0.66, 0.24, 0.66, roof[0], 0); }
-              else if (lv === 1) { Q(0, 0, 0.32, 0, 0.7, 0.32, 0.5, wall[1], 1); Q(2, 0, 0.82, 0, 0.9, 0.2, 0.66, roof[1], 0); }
-              else if (lv === 2) { Q(0, 0, 0.5, 0, 0.2, 0.5, 0.2, wall[2], 1); Q(0, 0, 1.02, 0, 0.22, 0.02, 0.22, roof[2], 0); }
-              else { Q(0, 0, 0.45, 0, 0.26, 0.45, 0.26, wall[3], 1); Q(0, 0, 0.95, 0, 0.18, 0.06, 0.18, wall[3], 1); Q(0, 0, 1.06, 0, 0.012, 0.06, 0.012, roof[3], 0); } }); };
-          if (lvl >= 1) { bld(0, 0.10 * town, 0.0038, 60); bld(0, 0.035 * town, 0.0055, 70); }
-          if (lvl >= 2) { bld(1, 0.24 * town, 0.008, 80); bld(0, 0.10 * town, 0.0045, 90); }
-          if (lvl >= 3) bld(2, 0.07 * core, 0.035, 100);
-          if (lvl >= 4) bld(3, 0.06 * core, 0.07, 110);
-          bld(0, lvl >= 2 ? 0.012 : 0.045, 0.004, 30); if (lvl < 2) bld(1, 0.025, 0.008, 40);
+          const stone = [0.56, 0.54, 0.5], wood = [0.42, 0.3, 0.18], brick = [0.55, 0.3, 0.24], metal = [0.5, 0.53, 0.56], dark = [0.16, 0.17, 0.19], glass = [0.45, 0.62, 0.72], lampC = [1.0, 0.88, 0.6];
+          // 建物の形(高さ1を基準にした部品の並び)。Q(形, 位置xyz, 大きさxyz, 色, 材質, 回す角度, 回し方)
+          const SHAPES = {
+            hut: (Q, w, rf) => { Q(0, 0, 0.3, 0, 0.45, 0.3, 0.45, w, 0); Q(2, 0, 0.82, 0, 0.66, 0.24, 0.66, rf, 0); },
+            roundhut: (Q, w, rf) => { Q(1, 0, 0.3, 0, 0.5, 0.36, 0.5, w, 0); Q(2, 0, 0.9, 0, 0.64, 0.32, 0.64, rf, 0); },
+            longhouse: (Q, w, rf) => { Q(0, 0, 0.25, 0, 0.95, 0.25, 0.35, w, 0); Q(2, 0, 0.68, 0, 1.08, 0.2, 0.46, rf, 0); },
+            granary: (Q, w, rf) => { for (const [x, z] of [[-0.25, -0.25], [0.25, -0.25], [-0.25, 0.25], [0.25, 0.25]]) Q(0, x, 0.2, z, 0.04, 0.2, 0.04, wood, 0); Q(0, 0, 0.6, 0, 0.36, 0.22, 0.36, w, 0); Q(2, 0, 1.0, 0, 0.5, 0.2, 0.5, rf, 0); },
+            monument: (Q) => { Q(0, -0.35, 0.45, 0, 0.09, 0.45, 0.09, stone, 0); Q(0, 0.35, 0.45, 0, 0.09, 0.45, 0.09, stone, 0); Q(0, 0, 0.95, 0, 0.5, 0.07, 0.1, stone, 0); },
+            house: (Q, w, rf) => { Q(0, 0, 0.32, 0, 0.7, 0.32, 0.5, w, 1); Q(2, 0, 0.82, 0, 0.9, 0.2, 0.66, rf, 0); Q(0, 0.35, 0.92, 0.2, 0.06, 0.16, 0.06, brick, 0); },
+            twostory: (Q, w, rf) => { Q(0, 0, 0.5, 0, 0.5, 0.5, 0.4, w, 1); Q(2, 0, 1.16, 0, 0.66, 0.18, 0.54, rf, 0); },
+            temple: (Q, w, rf) => { Q(0, 0, 0.1, 0, 0.9, 0.1, 0.9, stone, 0); Q(0, 0, 0.28, 0, 0.68, 0.08, 0.68, stone, 0); Q(0, 0, 0.56, 0, 0.42, 0.2, 0.42, w, 1); Q(2, 0, 0.96, 0, 0.56, 0.2, 0.56, rf, 0); for (const x of [-0.5, 0.5]) for (const z of [-0.5, 0.5]) Q(0, x, 0.52, z, 0.045, 0.18, 0.045, stone, 0); },
+            windmill: (Q, w) => { Q(2, 0, 0.5, 0, 0.26, 0.5, 0.26, w, 0); Q(0, 0.28, 0.82, 0, 0.02, 0.42, 0.05, wood, 0, 0.5, 4); Q(0, 0.28, 0.82, 0, 0.02, 0.42, 0.05, wood, 0, 2.07, 4); },
+            factory: (Q) => { Q(0, 0, 0.25, 0, 0.95, 0.25, 0.55, brick, 1); Q(0, -0.55, 0.8, 0.25, 0.07, 0.55, 0.07, brick, 0); Q(0, -0.3, 0.68, 0.25, 0.07, 0.43, 0.07, brick, 0); for (const x of [0.1, 0.45, 0.8]) Q(2, x, 0.6, 0, 0.19, 0.1, 0.55, dark, 0); },
+            apartment: (Q, w) => { Q(0, 0, 0.5, 0, 0.75, 0.5, 0.3, w, 1); Q(0, 0, 1.02, 0, 0.78, 0.02, 0.33, dark, 0); },
+            clock: (Q, w, rf) => { Q(0, 0, 0.5, 0, 0.14, 0.5, 0.14, stone, 1); Q(2, 0, 1.16, 0, 0.2, 0.16, 0.2, rf, 0); Q(1, 0.15, 0.85, 0, 0.02, 0.08, 0.08, lampC, 4); },
+            warehouse: (Q) => { Q(0, 0, 0.22, 0, 0.95, 0.22, 0.6, metal, 0); Q(2, 0, 0.53, 0, 1.05, 0.1, 0.68, dark, 0); },
+            tower: (Q, w) => { Q(0, 0, 0.5, 0, 0.2, 0.5, 0.2, w, 1); Q(0, 0, 1.02, 0, 0.22, 0.02, 0.22, dark, 0); },
+            sky1: (Q, w) => { Q(0, 0, 0.45, 0, 0.2, 0.45, 0.2, w, 1); Q(0, 0, 0.95, 0, 0.14, 0.05, 0.14, w, 1); Q(0, 0, 1.08, 0, 0.008, 0.08, 0.008, dark, 0); Q(1, 0, 1.17, 0, 0.012, 0.012, 0.012, [1, 0.25, 0.2], 4); },
+            sky2: (Q, w) => { Q(0, 0, 0.3, 0, 0.26, 0.3, 0.26, w, 1); Q(0, 0, 0.72, 0, 0.19, 0.12, 0.19, w, 1); Q(0, 0, 0.93, 0, 0.12, 0.09, 0.12, w, 1); },
+            glass: (Q) => { Q(0, 0, 0.5, 0, 0.17, 0.5, 0.24, glass, 1); },
+            dome: (Q, w) => { Q(0, 0, 0.2, 0, 0.62, 0.2, 0.62, w, 1); Q(1, 0, 0.4, 0, 0.56, 0.42, 0.56, glass, 0); },
+            antenna: (Q) => { Q(0, 0, 0.5, 0, 0.02, 0.5, 0.02, metal, 0); for (const y of [0.3, 0.55, 0.8]) Q(0, 0, y, 0, 0.09 * (1.1 - y), 0.008, 0.09 * (1.1 - y), metal, 0); Q(1, 0, 1.02, 0, 0.022, 0.022, 0.022, [1, 0.25, 0.2], 4); },
+            lamp: (Q) => { Q(0, 0, 0.5, 0, 0.02, 0.5, 0.02, dark, 0); Q(1, 0, 1.0, 0, 0.09, 0.09, 0.09, lampC, 4); },
+          };
+          const bld = (name, pal, prob, size, k) => { if (r(k) >= prob) return; const x = X(k + 1), z = Z(k + 1), sz = size * (0.8 + 0.4 * r(k + 2)), yaw = r(k + 3) < 0.5 ? 0 : 1.5708, tint = 0.85 + 0.3 * r(k + 4);
+            stat(x, z, (el) => SHAPES[name]((prim, ox, oy, oz, sx, sy, s2, col, mat, rot, mode) => part(o2, prim, x, el, z, yaw, sz, ox, oy, oz, sx, sy, s2, col, mat, rot, mode), wall[pal].map((v) => Math.min(1, v * tint)), roof[pal])); };
+          // 文明の段階ごとに、建つ物が増える(町の中心ほど大きな建物)
+          bld(r(31) < 0.5 ? 'hut' : 'roundhut', 0, lvl >= 2 ? 0.012 : 0.045, 0.0038, 30);
+          bld('hut', 0, 0.10 * town, 0.0038, 60); bld('longhouse', 0, 0.04 * town, 0.0046, 70); bld('granary', 0, 0.03 * town, 0.004, 75); bld('monument', 0, 0.004, 0.006, 78);
+          if (lvl >= 2) { bld('house', 1, 0.2 * town, 0.008, 80); bld('twostory', 1, 0.1 * town, 0.009, 85); bld('temple', 1, 0.02 * core, 0.016, 90); bld('windmill', 1, 0.012 * (1 - town), 0.012, 95); }
+          if (lvl >= 3) { bld('tower', 2, 0.05 * core, 0.035, 100); bld('factory', 2, 0.04 * core, 0.015, 105); bld('apartment', 2, 0.08 * core, 0.018, 110); bld('clock', 2, 0.012 * core, 0.03, 115); bld('warehouse', 2, 0.03 * town, 0.009, 120); }
+          if (lvl >= 4) { bld('sky1', 3, 0.04 * core, 0.09, 125); bld('sky2', 3, 0.035 * core, 0.07, 130); bld('glass', 3, 0.02 * core, 0.11, 135); bld('dome', 3, 0.008 * core, 0.03, 140); bld('antenna', 3, 0.004, 0.06, 145); bld('lamp', 3, 0.14 * town, 0.006, 150); bld('lamp', 3, 0.14 * town, 0.006, 155); }
         }
         cc = o2.map((arr) => new Float32Array(arr));
         if (cellCache.size > 1500) cellCache.clear();
@@ -1352,7 +1433,7 @@ function create(env) {
     u.set([...sf.s0, R], 16); u.set([...sf.Eb, relief], 20); u.set([...sf.Nb, hasWater ? sea : 0.35], 24);
     u.set([sf.wx, sf.wz, p.seed || 1, kind], 28); u.set(atm, 32); u.set([bb[0] / bm, bb[1] / bm, bb[2] / bm, half], 36);
     const veg = vegOf(p), lvl = S.civNow = civLevel();
-    u.set([p.tsurf || 280, greenOf(p), hasWater, sea], 40); u.set([Math.abs(sf.s0[1]), ...veg.a], 44); u.set([lvl, p.kind === 'earthlike' ? 0.5 : p.kind === 'frozen' ? 0.35 : p.kind === 'venus' ? 0.9 : p.kind === 'desert' ? 0.12 : 0, elevJS(sf.wx, sf.wz)[0], 0], 48);
+    u.set([p.tsurf || 280, greenOf(p), hasWater, sea], 40); u.set([Math.abs(sf.s0[1]), ...veg.a], 44); u.set([lvl, p.kind === 'earthlike' ? 0.5 : p.kind === 'frozen' ? 0.35 : p.kind === 'venus' ? 0.9 : p.kind === 'desert' ? 0.12 : 0, elevJS(sf.wx, sf.wz)[0], 1], 48);
     device.queue.writeBuffer(surfU, 0, u);
     // 生態系は世界時間(worldYears)側だけで進める。描画dtでの二重進行を廃止。
     buildCreatures(sf, performance.now() / 1000);
@@ -1467,6 +1548,12 @@ function create(env) {
     }
     const W = canvas.clientWidth, H = canvas.clientHeight;
     const enc = device.createCommandEncoder();
+    if (S.kind === 'surface') { // 先に地表の状態を作り、太陽から見た影の地図を描いておく
+      planetFrame(dtReal, W, H); surfaceFrame(dtReal, W, H);
+      const sp = enc.beginRenderPass({ colorAttachments: [], depthStencilAttachment: { view: shTex.createView(), depthClearValue: 1, depthLoadOp: 'clear', depthStoreOp: 'store' } });
+      if (crCount && S.sf.sel > 2) { sp.setPipeline(shPipe); sp.setBindGroup(0, crBG); if (crN[0]) sp.draw(36, crN[0], 0, 0); if (crN[1]) sp.draw(240, crN[1], 0, crN[0]); if (crN[2]) sp.draw(48, crN[2], 0, crN[0] + crN[1]); }
+      sp.end();
+    }
     const desc = { colorAttachments: [{ view: ctx.getCurrentTexture().createView(), clearValue: { r: 0, g: 0, b: 0.008, a: 1 }, loadOp: 'clear', storeOp: 'store' }] };
     if (S.kind === 'surface') desc.depthStencilAttachment = { view: depthView(), depthClearValue: 1, depthLoadOp: 'clear', depthStoreOp: 'store' }; // 地表だけ奥行きを使う
     const pass = enc.beginRenderPass(desc);
@@ -1496,10 +1583,8 @@ function create(env) {
       objectFrame(dtReal, W, H);
       pass.setPipeline(objPipe); pass.setBindGroup(0, objBG); pass.draw(3);
     } else if (S.kind === 'surface') {
-      planetFrame(dtReal, W, H); // 惑星の自転と太陽の向きの更新(軌道の絵は描かない)
-      surfaceFrame(dtReal, W, H);
-      pass.setPipeline(surfPipe); pass.setBindGroup(0, surfBG); pass.draw(3);
-      if (crCount) { pass.setPipeline(crPipe); pass.setBindGroup(0, crBG); if (crN[0]) pass.draw(36, crN[0], 0, 0); if (crN[1]) pass.draw(360, crN[1], 0, crN[0]); if (crN[2]) pass.draw(48, crN[2], 0, crN[0] + crN[1]); }
+      pass.setPipeline(surfPipe); pass.setBindGroup(0, surfBG2); pass.draw(3);
+      if (crCount) { pass.setPipeline(crPipe); pass.setBindGroup(0, surfBG2); if (crN[0]) pass.draw(36, crN[0], 0, 0); if (crN[1]) pass.draw(240, crN[1], 0, crN[0]); if (crN[2]) pass.draw(48, crN[2], 0, crN[0] + crN[1]); }
     }
     pass.end(); device.queue.submit([enc.finish()]);
     env.setInfo(info());
@@ -1509,7 +1594,8 @@ function create(env) {
     get kind() { return S.kind; }, active, curCam, enterGalaxy, enterSun, back, onTap, frame, speedText,
     canBack: () => S.stack.length > 0, enterPlanet, labelsRef: () => S.labels,
     getSystem: () => S.sys, getPlanet: () => S.pl, planetIndex: () => S.plIdx, eco: () => S.eco, worldTime: () => S.worldYears, ecoLag: () => (S.eco ? Math.max(0, S.worldYears - (S.ecoLog || 0)) : 0), setHumanLoad: (x) => { S.humanLoad = Math.max(0, Math.min(1, x)); if (S.eco) S.eco.cover = (S.eco.baseCover || 0.85) * (1 - 0.6 * S.humanLoad) * Math.max(0.35, 1 - 0.09 * Math.max(0, S.dT || 0)); }, setClimate: (dT) => { S.dT = dT; }, ecoEvent: (k) => { if (S.eco) S.eco.event(k, 0.6 + 0.3 * Math.random()); }, setFly, flying: () => { const c = cams[S.kind]; return !!(c && c.fly); }, viewObject, nearby: () => S.near || [], follow: (k) => { S.follow = (S.follow === k ? null : k); }, following: () => S.follow, scanLife, flyTo, land: () => land(null), setWalk: (v) => { S.walk = v; }, setMove: (f, s2) => { S.walk = f; S.strafe = s2; }, setVert: (v) => { S.vert = v; },
-    dbg: () => ({ crCount, fauna: (S.fauna||[]).map((x) => x.kind + ':' + x.size.toFixed(4)).join(' '), h: terrainH(S.sf.s0, S.pl.seed || 1), sea: 0.3 + 0.4 * (S.pl.water || 0), seed: S.pl.seed, kind: S.pl.kind, s0: S.sf.s0 }),
+    dbgSh: () => shTex,
+    dbg: () => ({ crCount, crN, sel: S.sf && S.sf.sel, fauna: (S.fauna||[]).map((x) => x.kind + ':' + x.size.toFixed(4)).join(' '), h: terrainH(S.sf.s0, S.pl.seed || 1), sea: 0.3 + 0.4 * (S.pl.water || 0), seed: S.pl.seed, kind: S.pl.kind, s0: S.sf.s0 }),
     civTarget: () => (S.pl && S.pl.bio && S.pl.bio.intelligent && S.sys ? { key: S.sys.seed + ':' + S.pl.name, name: S.pl.name, real: !!S.pl.bio.real, seed: Math.floor((S.pl.seed || 1) * 1000) } : null),
     cosmosReturn: () => { S.kind = 'cosmos'; S.stack = []; clearLabels(); },
   };
