@@ -285,6 +285,12 @@ fn skyCol(rd: vec3f, Ls: vec3f, withDisk: bool) -> vec3f {
   }
   let vis = clamp(1.0 - atmD * day * 1.15, 0.0, 1.0);
   c += starfield(rd) * vis;
+  if (u.y.y > 0.01 && rd.y > 0.01) { // 雲: 高い所にある平らな層を、視線との交点で見る
+    let cuv = rd.xz / (rd.y + 0.12) * 1.3 + vec2f(u.L.w * 0.004, u.L.w * 0.0015);
+    let cl = smoothstep(0.62 - 0.3 * u.y.y, 0.82 - 0.3 * u.y.y, fbm3(vec3f(cuv, 4.0), 4)) * smoothstep(0.01, 0.16, rd.y);
+    let lit = mix(vec3f(0.035, 0.04, 0.06), mix(vec3f(1.0, 0.62, 0.42), vec3f(1.0), smoothstep(0.0, 0.35, sel)), day);
+    c = mix(c, lit * (0.75 + 0.25 * fbm3(vec3f(cuv * 3.0, 9.0), 3)), cl * 0.85);
+  }
   if (withDisk) {
     let ang = acos(clamp(dot(rd, Ls), -1.0, 1.0));
     let hs = u.sc.w;
@@ -294,13 +300,15 @@ fn skyCol(rd: vec3f, Ls: vec3f, withDisk: bool) -> vec3f {
   return c;
 }
 
-@fragment fn fs(i: PO) -> @location(0) vec4f {
+struct FO { @location(0) col: vec4f, @builtin(frag_depth) depth: f32 };
+@fragment fn fs(i: PO) -> FO {
   let uv = i.uv * 2.0 - 1.0;
   let rd = normalize(u.f.xyz + u.r.xyz * uv.x * u.f.w * u.r.w + u.u.xyz * uv.y * u.r.w);
   let Ls = normalize(u.L.xyz);
   let atmD = u.atm.w;
   let kind = i32(u.w.w + 0.5);
-  let E0 = elevAt(u.w.xy, 5);
+  let E0 = u.y.z; // 足元の標高(CPU で計算した値。立体物の高さと必ず一致させるため)
+  var depth = 1.0;
   let ro = vec3f(0.0, u.u.w, 0.0);
   var col = skyCol(rd, Ls, true);
   var t = 0.0006; var tp = 0.0; var hit = false;
@@ -310,7 +318,7 @@ fn skyCol(rd: vec3f, Ls: vec3f, withDisk: bool) -> vec3f {
     for (var k = 0; k < 96; k++) {
       if (k >= maxK) { break; }
       let p = ro + rd * t;
-      let lod = i32(clamp(log2(max(t, 0.01) / 0.01) * 0.45, 0.0, 3.0));
+      let lod = i32(clamp(log2(max(t, 0.35) / 0.35) * 0.6, 0.0, 3.0));
       let d = p.y - (gH(p.xz, 5 - lod) - E0);
       if (d < 0.0) { hit = true; break; }
       if (p.y > ymax && rd.y > 0.0) { break; }
@@ -321,13 +329,14 @@ fn skyCol(rd: vec3f, Ls: vec3f, withDisk: bool) -> vec3f {
   }
   if (hit) {
     var a = tp; var b = t;
-    let lod0 = i32(clamp(log2(max(t, 0.01) / 0.01) * 0.45, 0.0, 3.0));
+    let lod0 = i32(clamp(log2(max(t, 0.35) / 0.35) * 0.6, 0.0, 3.0));
     let oct = 5 - lod0;
     for (var k = 0; k < 6; k++) {
       let m = 0.5 * (a + b); let p = ro + rd * m;
       if (p.y - (gH(p.xz, oct) - E0) < 0.0) { b = m; } else { a = m; }
     }
     t = b;
+    depth = 1.0 - 0.0003 / max(t * dot(rd, u.f.xyz), 0.0003);
     let p = ro + rd * t; let q = p.xz;
     let eps = max(0.0004, 0.002 * t);
     let gx = gH(q + vec2f(eps, 0.0), oct) - gH(q - vec2f(eps, 0.0), oct);
@@ -389,7 +398,18 @@ fn skyCol(rd: vec3f, Ls: vec3f, withDisk: bool) -> vec3f {
       }
       let ext = select(1.0, smoothstep(-0.03, 0.14, Ls.y), atmD > 0.0);
       let tint = mix(vec3f(1.0), mix(vec3f(1.0, 0.5, 0.25), vec3f(1.0), smoothstep(0.0, 0.3, Ls.y)), min(atmD, 1.0));
-      let direct = max(dot(n, Ls), 0.0) * smoothstep(-0.02, 0.05, Ls.y) * ext;
+      var shadow = 1.0;
+      if (Ls.y > 0.0 && t < 8.0) {
+        var ts = 0.004 + 0.01 * t;
+        for (var k = 0; k < 10; k++) {
+          let ps = p + Ls * ts;
+          let dh = ps.y - (gH(ps.xz, oct) - E0);
+          shadow = min(shadow, clamp(0.5 + dh / (0.08 * ts), 0.0, 1.0));
+          if (shadow < 0.02) { break; }
+          ts *= 1.7;
+        }
+      }
+      let direct = max(dot(n, Ls), 0.0) * smoothstep(-0.02, 0.05, Ls.y) * ext * shadow;
       let amb = (u.atm.xyz * atmD * 0.35 + 0.012) * day + vec3f(0.022, 0.027, 0.04);
       lit = alb * (u.sc.xyz * tint * 1.25 * direct + amb * (0.55 + 0.45 * n.y)) + emis;
     }
@@ -399,187 +419,86 @@ fn skyCol(rd: vec3f, Ls: vec3f, withDisk: bool) -> vec3f {
     col = mix(lit, fogC, fa);
   }
   col = pow(clamp(col, vec3f(0.0), vec3f(1.0)), vec3f(0.92));
-  return vec4f(col, 1.0);
+  var o: FO; o.col = vec4f(col, 1.0); o.depth = depth; return o;
 }
 
 @group(0) @binding(1) var<storage, read> cr: array<vec4f>;
-struct CO { @builtin(position) p: vec4f, @location(0) uv: vec2f, @location(1) @interpolate(flat) kind: f32,
-            @location(2) @interpolate(flat) c1: vec4f, @location(3) @interpolate(flat) c2: vec4f, @location(4) @interpolate(flat) misc: vec4f };
-// cr(1体につき4つ): a=(x,z,大きさkm,種類) b=(色1,様式) c=(色2,位相) d=(向き,生息地0陸1水2空,高さkm,横幅比)
-@vertex fn vsC(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> CO {
+// 立体物: 箱・球・円すいの組み合わせで、建物・木・動物・人を作る。奥行き(深度)で地形の向こうは隠れる。
+// cr(部品1つにつき4つ): a=(基準の東, 基準の標高, 基準の北, 向き) b=(位置のずれxyz, 回す角度) c=(大きさxyz, 回し方) d=(色, 形*10+材質)
+struct MO { @builtin(position) p: vec4f, @location(0) n: vec3f, @location(1) lp: vec3f, @location(2) @interpolate(flat) col: vec4f, @location(3) wp: vec3f, @location(4) ln: vec3f };
+@vertex fn vsM(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> MO {
   let a = cr[ii * 4u]; let b = cr[ii * 4u + 1u]; let c = cr[ii * 4u + 2u]; let d = cr[ii * 4u + 3u];
-  var cs = array<vec2f, 6>(vec2f(-1.0, 0.0), vec2f(1.0, 0.0), vec2f(-1.0, 1.0), vec2f(-1.0, 1.0), vec2f(1.0, 0.0), vec2f(1.0, 1.0));
-  let cc = cs[vi];
-  let kind = i32(a.w + 0.5);
-  let q = a.xy - u.w.xy;
-  let ro = vec3f(0.0, u.u.w, 0.0);
-  let E0 = elevAt(u.w.xy, 5);
-  let h = macroH(a.xy);
-  let water = u.m.z > 0.5 && h < u.nb.w;
-  var vis = 1.0;
-  let hab = i32(d.y + 0.5);
-  if (hab == 0 && water) { vis = 0.0; }
-  if (hab == 1 && !water) { vis = 0.0; }
-  if (kind == 3 && macroM(a.xy) < 0.40) { vis = 0.0; }
-  let ql = length(q);
-  if (ql < 0.0015) { vis = 0.0; }
-  let vd = q / max(ql, 0.0001);
-  let right = vec3f(vd.y, 0.0, -vd.x);
-  let vel = vec2f(sin(d.x), cos(d.x));
-  var flip = select(-1.0, 1.0, dot(vel, vec2f(right.x, right.z)) >= 0.0);
-  let gy = gH(q, 5 - i32(clamp(log2(max(ql, 0.01) / 0.01) * 0.45, 0.0, 3.0))) - E0 + d.z;
-  let base = vec3f(q.x, gy, q.y);
-  let wpos = base + right * (cc.x * a.z * d.w) + vec3f(0.0, cc.y * a.z, 0.0);
-  if (vis > 0.5 && d.z < 0.001) {
-    let mid = base + vec3f(0.0, a.z * 0.6, 0.0);
-    for (var k = 1; k <= 6; k++) {
-      let pp = mix(ro, mid, vec3f(f32(k) / 7.0));
-      if (pp.y < gH(pp.xz, 3) - E0 - 0.004) { vis = 0.0; }
-    }
+  let prim = i32(d.w / 10.0 + 0.01);
+  var v = vec3f(0.0); var n = vec3f(0.0, 1.0, 0.0);
+  var qc = array<vec2f, 6>(vec2f(-1.0, -1.0), vec2f(1.0, -1.0), vec2f(-1.0, 1.0), vec2f(-1.0, 1.0), vec2f(1.0, -1.0), vec2f(1.0, 1.0));
+  if (prim == 0) { // 箱(36頂点)
+    let face = vi / 6u; let cc = qc[vi % 6u]; let ax = face / 2u; let sg = f32(face % 2u) * 2.0 - 1.0;
+    v[ax] = sg; v[(ax + 1u) % 3u] = cc.x; v[(ax + 2u) % 3u] = cc.y;
+    n = vec3f(0.0); n[ax] = sg;
+  } else if (prim == 1) { // 球(経度10×緯度6 = 360頂点)
+    let qd = vi / 6u; let cc = qc[vi % 6u] * 0.5 + 0.5; let iu = f32(qd % 10u); let iv = f32(qd / 10u);
+    let th = (iv + cc.y) / 6.0 * 3.14159265; let ph = (iu + cc.x) / 10.0 * 6.2831853;
+    v = vec3f(sin(th) * cos(ph), cos(th), sin(th) * sin(ph)); n = v;
+  } else { // 円すい(8面: 側面24 + 底面24 = 48頂点)。頂点は上(+1)、底は下(-1)
+    let tr = vi / 3u; let k = vi % 3u; let side = tr < 8u; let j = f32(tr % 8u);
+    let a0 = j / 8.0 * 6.2831853; let a1 = (j + 1.0) / 8.0 * 6.2831853;
+    let p0 = vec3f(cos(a0), -1.0, sin(a0)); let p1 = vec3f(cos(a1), -1.0, sin(a1));
+    if (side) { if (k == 0u) { v = vec3f(0.0, 1.0, 0.0); } else if (k == 1u) { v = p0; } else { v = p1; } let am = (a0 + a1) * 0.5; n = normalize(vec3f(cos(am), 0.5, sin(am))); }
+    else { if (k == 0u) { v = vec3f(0.0, -1.0, 0.0); } else if (k == 1u) { v = p1; } else { v = p0; } n = vec3f(0.0, -1.0, 0.0); }
   }
-  let v = wpos - ro;
-  let cz = dot(v, u.f.xyz); let cx = dot(v, u.r.xyz); let cy = dot(v, u.u.xyz);
-  if (cz < 0.0005) { vis = 0.0; }
-  var o: CO;
-  o.p = select(vec4f(3.0, 3.0, 3.0, 1.0), vec4f(cx / (u.f.w * u.r.w), cy / u.r.w, 0.5 * cz, cz), vis > 0.5);
-  o.uv = vec2f(cc.x * d.w * flip, cc.y);
-  o.kind = a.w; o.c1 = vec4f(b.xyz, b.w); o.c2 = vec4f(c.xyz, c.w); o.misc = vec4f(c.w, b.w, cz, 0.0);
+  // 回し方: 1=上端を支点にZ軸まわり(脚・腕) 2,3=内側の端を支点にX軸まわり(翼) 4=中心でZ軸まわり(首・尾)
+  let mode = i32(c.w + 0.5);
+  if (mode == 1) { v.y -= 1.0; } else if (mode == 2) { v.z += 1.0; } else if (mode == 3) { v.z -= 1.0; }
+  var l = v * c.xyz; var ln = n / max(c.xyz, vec3f(1e-6));
+  let cr2 = cos(b.w); let sr = sin(b.w);
+  if (mode == 1 || mode == 4) { l = vec3f(l.x * cr2 - l.y * sr, l.x * sr + l.y * cr2, l.z); ln = vec3f(ln.x * cr2 - ln.y * sr, ln.x * sr + ln.y * cr2, ln.z); }
+  else if (mode == 2 || mode == 3) { l = vec3f(l.x, l.y * cr2 - l.z * sr, l.y * sr + l.z * cr2); ln = vec3f(ln.x, ln.y * cr2 - ln.z * sr, ln.y * sr + ln.z * cr2); }
+  l += b.xyz;
+  // 向き(yaw): 物体の前(+x)が、方位 yaw(北から東回り)を向く
+  let sy = sin(a.w); let cy = cos(a.w);
+  let X = vec3f(sy, 0.0, cy); let Z = vec3f(cy, 0.0, -sy);
+  let q = a.xz - u.w.xy;
+  let base = vec3f(q.x, a.y - u.y.z - dot(q, q) / (2.0 * u.s0.w), q.y);
+  let wpos = base + X * l.x + vec3f(0.0, l.y, 0.0) + Z * l.z;
+  let wn = normalize(X * ln.x + vec3f(0.0, ln.y, 0.0) + Z * ln.z);
+  let vv = wpos - vec3f(0.0, u.u.w, 0.0);
+  let cz = dot(vv, u.f.xyz); let cx = dot(vv, u.r.xyz); let cyy = dot(vv, u.u.xyz);
+  var o: MO;
+  o.p = vec4f(cx / (u.f.w * u.r.w), cyy / u.r.w, cz - 0.0003, cz);
+  o.n = wn; o.lp = v * c.xyz; o.col = d; o.wp = vv; o.ln = n;
   return o;
 }
-fn sdE(p: vec2f, c: vec2f, r: vec2f) -> f32 { return (length((p - c) / r) - 1.0) * min(r.x, r.y); }
-fn sdCap(p: vec2f, a: vec2f, b: vec2f, r: f32) -> f32 { let pa = p - a; let ba = b - a; let h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0); return length(pa - ba * h) - r; }
-fn sdB(p: vec2f, c: vec2f, h: vec2f) -> f32 { let d = abs(p - c) - h; return length(max(d, vec2f(0.0))) + min(max(d.x, d.y), 0.0); }
-fn sdTri(p: vec2f, x0: f32, y0: f32, w: f32, hgt: f32) -> f32 { return max(abs(p.x - x0) - w * (1.0 - (p.y - y0) / hgt), max(y0 - p.y, p.y - (y0 + hgt))); }
-
-@fragment fn fsC(i: CO) -> @location(0) vec4f {
-  let p = i.uv; let ph = i.misc.x; let st = i.misc.y; let kind = i32(i.kind + 0.5);
-  let Ls = normalize(u.L.xyz);
-  let day = smoothstep(-0.12, 0.18, Ls.y);
-  var d = 1.0; var col = i.c1.rgb; var emis = vec3f(0.0);
-  if (kind == 0) {
-    let plan = floor(st / 10.0 + 0.001); let legs = st - plan * 10.0;
-    var tops = array<f32, 6>(0.4, 0.35, 0.2, 0.4, 0.0, 0.5);
-    var eyes = array<vec2f, 6>(vec2f(0.66, 0.64), vec2f(0.82, 0.96), vec2f(0.64, 0.34), vec2f(0.44, 0.98), vec2f(0.69, 0.13), vec2f(0.6, 0.94));
-    let pi = i32(clamp(plan, 0.0, 5.0));
-    if (pi == 0) {
-      d = sdE(p, vec2f(0.0, 0.5), vec2f(0.5, 0.21));
-      d = min(d, sdE(p, vec2f(0.6, 0.6), vec2f(0.17, 0.15)));
-      d = min(d, sdCap(p, vec2f(0.42, 0.55), vec2f(0.55, 0.6), 0.09));
-      d = min(d, sdCap(p, vec2f(0.64, 0.72), vec2f(0.6, 0.88), 0.04));
-      d = min(d, sdCap(p, vec2f(-0.48, 0.55), vec2f(-0.75, 0.5 + 0.08 * sin(ph * 2.0)), 0.05));
-    } else if (pi == 1) {
-      d = sdE(p, vec2f(0.0, 0.45), vec2f(0.5, 0.19));
-      d = min(d, sdCap(p, vec2f(0.38, 0.5), vec2f(0.72, 0.92), 0.06));
-      d = min(d, sdE(p, vec2f(0.8, 0.95), vec2f(0.12, 0.06)));
-      d = min(d, sdCap(p, vec2f(-0.5, 0.5), vec2f(-1.0, 0.32 + 0.06 * sin(ph * 2.0)), 0.04));
-    } else if (pi == 2) {
-      d = sdE(p, vec2f(0.0, 0.3), vec2f(0.55, 0.2));
-      d = min(d, sdE(p, vec2f(0.6, 0.32), vec2f(0.16, 0.13)));
-      d = min(d, sdCap(p, vec2f(0.68, 0.4), vec2f(0.85, 0.7 + 0.05 * sin(ph * 3.0)), 0.015));
-      d = min(d, sdCap(p, vec2f(0.62, 0.4), vec2f(0.7, 0.75 - 0.05 * sin(ph * 3.0)), 0.015));
-    } else if (pi == 3) {
-      d = sdE(p, vec2f(0.0, 0.58), vec2f(0.3, 0.26));
-      d = min(d, sdCap(p, vec2f(0.2, 0.7), vec2f(0.32, 0.95), 0.07));
-      d = min(d, sdE(p, vec2f(0.4, 0.97), vec2f(0.1, 0.06)));
-      d = min(d, sdCap(p, vec2f(-0.25, 0.6), vec2f(-0.5, 0.45), 0.05));
-    } else if (pi == 4) {
-      for (var k = 0; k < 8; k++) { let fk = f32(k); d = min(d, length(p - vec2f(-0.85 + 0.22 * fk, 0.12 + 0.07 * sin(ph * 2.0 + fk))) - (0.07 + select(0.0, 0.03, k == 7))); }
-    } else {
-      d = sdE(p, vec2f(0.0, 0.62), vec2f(0.4, 0.15));
-      d = min(d, sdCap(p, vec2f(0.34, 0.68), vec2f(0.5, 0.9), 0.05));
-      d = min(d, sdE(p, vec2f(0.56, 0.92), vec2f(0.12, 0.07)));
-      d = min(d, sdCap(p, vec2f(0.52, 0.97), vec2f(0.45, 1.0), 0.02));
+@fragment fn fsM(i: MO) -> @location(0) vec4f {
+  let Ls = normalize(u.L.xyz); let atmD = u.atm.w;
+  let prim = floor(i.col.w / 10.0 + 0.01); let mat = i32(i.col.w - prim * 10.0 + 0.5);
+  let day = smoothstep(-0.12, 0.12, Ls.y);
+  var n = normalize(i.n); var alb = i.col.rgb; var emis = vec3f(0.0);
+  let dist = length(i.wp);
+  if (mat == 1) { // 建物: 壁に窓を並べる(1階=約3.2m)。夜は一部の窓に明かり
+    if (abs(i.ln.y) < 0.5) {
+      let hcoord = select(i.lp.x, i.lp.z, abs(i.ln.x) > 0.5) * 1000.0; let vcoord = i.lp.y * 1000.0;
+      let cell = vec2f(floor(hcoord / 2.6), floor(vcoord / 3.2));
+      let fx = fract(hcoord / 2.6); let fy = fract(vcoord / 3.2);
+      let win = step(0.22, fx) * step(fx, 0.78) * step(0.3, fy) * step(fy, 0.8);
+      let on = step(0.55, hash31(vec3f(cell, 3.0 + i.col.r * 10.0)));
+      alb = mix(alb, vec3f(0.12, 0.16, 0.22), win * 0.85);
+      emis = vec3f(1.0, 0.82, 0.5) * win * on * (1.0 - day) * 1.1;
     }
-    let pairs = max(floor(legs * 0.5), 1.0);
-    var dl = 1.0;
-    let lr = select(0.04, select(0.03, 0.025, pi == 2), pi == 5 || pi == 2);
-    for (var k = 0; k < 6; k++) {
-      if (f32(k) >= legs) { break; }
-      let pr = f32(k / 2);
-      var fx = mix(-0.38, 0.38, select(0.5, pr / max(pairs - 1.0, 1.0), pairs > 1.0));
-      if (pi == 3) { fx = 0.0; }
-      let sw = 0.09 * sin(ph * 3.0 + f32(k) * 3.14159 + pr);
-      dl = min(dl, sdCap(p, vec2f(fx, tops[pi]), vec2f(fx + sw, 0.0), lr));
-    }
-    if (dl < d) { col = i.c2.rgb; }
-    if (length(p - eyes[pi]) < 0.07) { col = mix(i.c1.rgb, i.c2.rgb, 0.6); }
-    d = min(d, dl);
-    if (length(p - eyes[pi]) < 0.025) { col = vec3f(0.02); }
-  } else if (kind == 1) {
-    let f = sin(ph * 6.0);
-    d = sdE(p, vec2f(0.0, 0.5), vec2f(0.28, 0.12));
-    d = min(d, sdE(p, vec2f(0.3, 0.58), vec2f(0.07, 0.07)));
-    d = min(d, sdCap(p, vec2f(-0.28, 0.5), vec2f(-0.6, 0.45), 0.03));
-    let dw = min(sdCap(p, vec2f(-0.05, 0.58), vec2f(-0.45, 0.58 + 0.5 * f), 0.05), sdCap(p, vec2f(0.05, 0.58), vec2f(0.4, 0.58 + 0.5 * sin(ph * 6.0 + 0.6)), 0.05));
-    if (dw < d) { col = i.c2.rgb; }
-    d = min(d, dw);
-  } else if (kind == 2) {
-    d = sdE(p, vec2f(0.0, 0.5), vec2f(0.7, 0.22));
-    let dt = min(sdCap(p, vec2f(-0.62, 0.5), vec2f(-0.98, 0.78 + 0.06 * sin(ph * 5.0)), 0.05), sdCap(p, vec2f(-0.62, 0.5), vec2f(-0.98, 0.22 - 0.06 * sin(ph * 5.0)), 0.05));
-    let df = sdCap(p, vec2f(0.0, 0.7), vec2f(-0.2, 0.92), 0.04);
-    if (min(dt, df) < d) { col = i.c2.rgb; }
-    d = min(d, min(dt, df));
-    if (length(p - vec2f(0.5, 0.55)) < 0.04) { col = vec3f(0.02); }
-  } else if (kind == 3) {
-    let sw = 0.02 * sin(ph);
-    if (st < 0.5) {
-      d = sdCap(p, vec2f(0.0, 0.0), vec2f(sw, 0.5), 0.06);
-      var dc = sdE(p, vec2f(sw, 0.72), vec2f(0.5, 0.3));
-      dc = min(dc, sdE(p, vec2f(-0.3 + sw, 0.62), vec2f(0.3, 0.22)));
-      dc = min(dc, sdE(p, vec2f(0.32 + sw, 0.64), vec2f(0.3, 0.22)));
-      col = select(i.c2.rgb, i.c1.rgb * (0.75 + 0.5 * noise3(vec3f(p * 7.0, 1.0))), dc < d);
-      d = min(d, dc);
-    } else if (st < 1.5) {
-      d = sdCap(p, vec2f(0.0, 0.0), vec2f(0.0, 0.2), 0.05);
-      var dc = 1.0;
-      for (var l = 0; l < 4; l++) { let y0 = 0.15 + 0.2 * f32(l); dc = min(dc, sdTri(p, sw * f32(l) * 0.4, y0, 0.5 - 0.1 * f32(l), 0.4)); }
-      col = select(i.c2.rgb, i.c1.rgb * (0.75 + 0.5 * noise3(vec3f(p * 7.0, 2.0))), dc < d);
-      d = min(d, dc);
-    } else {
-      d = sdE(p, vec2f(-0.4 + sw, 0.25), vec2f(0.4, 0.25));
-      d = min(d, sdE(p, vec2f(0.3 + sw, 0.3), vec2f(0.45, 0.3)));
-      d = min(d, sdE(p, vec2f(sw, 0.4), vec2f(0.4, 0.35)));
-      col = i.c1.rgb * (0.7 + 0.6 * noise3(vec3f(p * 8.0, 3.0)));
-    }
-  } else if (kind == 4) {
-    let s = sin(ph * 3.0);
-    d = sdE(p, vec2f(0.0, 0.9), vec2f(0.09, 0.09));
-    var db = sdCap(p, vec2f(0.0, 0.78), vec2f(0.0, 0.45), 0.09);
-    let dg = min(sdCap(p, vec2f(0.0, 0.45), vec2f(0.1 * s, 0.0), 0.05), sdCap(p, vec2f(0.0, 0.45), vec2f(-0.1 * s, 0.0), 0.05));
-    let da = min(sdCap(p, vec2f(0.0, 0.74), vec2f(-0.12 * s, 0.5), 0.04), sdCap(p, vec2f(0.0, 0.74), vec2f(0.12 * s, 0.5), 0.04));
-    col = select(i.c1.rgb, i.c2.rgb, d < min(db, min(dg, da)));
-    d = min(d, min(db, min(dg, da)));
-  } else {
-    let lvl = i32(st + 0.5);
-    var win = 0.0;
-    if (lvl == 0) {
-      d = min(sdB(p, vec2f(0.0, 0.22), vec2f(0.38, 0.22)), sdTri(p, 0.0, 0.42, 0.55, 0.55));
-      col = select(i.c2.rgb, i.c1.rgb, p.y < 0.42);
-    } else if (lvl == 1) {
-      d = min(sdB(p, vec2f(0.0, 0.3), vec2f(0.55, 0.3)), sdTri(p, 0.0, 0.6, 0.66, 0.4));
-      col = select(i.c2.rgb, i.c1.rgb, p.y < 0.6);
-      win = step(0.5, fract(p.x * 4.0 + 0.5)) * step(0.35, p.y) * step(p.y, 0.5) * step(abs(p.x), 0.5);
-    } else if (lvl == 2) {
-      d = sdB(p, vec2f(0.0, 0.5), vec2f(0.2, 0.5));
-      col = i.c1.rgb * (0.85 + 0.15 * noise3(vec3f(p * 20.0, 4.0)));
-      win = step(0.45, fract(p.x * 6.0)) * step(0.45, fract(p.y * 14.0)) * step(abs(p.x), 0.16) * step(0.08, p.y) * step(p.y, 0.95);
-    } else {
-      d = sdB(p, vec2f(0.0, 0.5), vec2f(0.28, 0.5));
-      col = i.c1.rgb * (0.85 + 0.15 * noise3(vec3f(p * 20.0, 5.0)));
-      win = step(0.4, fract(p.x * 8.0)) * step(0.4, fract(p.y * 24.0)) * step(abs(p.x), 0.24) * step(0.06, p.y) * step(p.y, 0.94) * step(0.35, hash31(floor(vec3f(p.x * 8.0, p.y * 24.0, 3.0))));
-    }
-    emis = vec3f(1.0, 0.82, 0.45) * win * (1.0 - day) * 1.4;
-    col = mix(col, vec3f(0.2, 0.25, 0.3), win * day * 0.7);
+  } else if (mat == 2) { // 葉: むら
+    alb *= 0.72 + 0.56 * noise3(i.wp * 900.0 + i.lp * 2000.0);
+  } else if (mat == 3) { // 生き物: 腹側を少し明るく
+    alb *= 0.85 + 0.25 * clamp(-n.y, 0.0, 1.0) + 0.1 * noise3(i.lp * 9000.0);
   }
-  let alpha = 1.0 - smoothstep(0.0, 0.025, d);
-  if (alpha <= 0.01) { discard; }
-  var lit = col * (0.1 + 0.9 * day * (0.55 + 0.45 * clamp(Ls.y * 1.5 + 0.2, 0.0, 1.0))) + emis;
-  let atmD = u.atm.w;
-  let fa = 1.0 - exp(-i.misc.z * (0.05 + select(0.0, 0.5, i32(u.w.w + 0.5) == 5)) * atmD);
-  let fogC = skyCol(vec3f(0.0, 0.02, 1.0), Ls, false);
-  lit = mix(lit, fogC, fa);
+  let ext = select(1.0, smoothstep(-0.03, 0.14, Ls.y), atmD > 0.0);
+  let tint = mix(vec3f(1.0), mix(vec3f(1.0, 0.5, 0.25), vec3f(1.0), smoothstep(0.0, 0.3, Ls.y)), min(atmD, 1.0));
+  let direct = max(dot(n, Ls), 0.0) * smoothstep(-0.02, 0.05, Ls.y) * ext;
+  let amb = (u.atm.xyz * atmD * 0.35 + 0.012) * day + vec3f(0.022, 0.027, 0.04);
+  var lit = alb * (u.sc.xyz * tint * 1.25 * direct + amb * (0.6 + 0.4 * n.y)) + emis;
+  let fa = 1.0 - exp(-dist * (0.05 + select(0.0, 0.5, i32(u.w.w + 0.5) == 5)) * atmD);
+  let rd = i.wp / max(dist, 1e-6);
+  lit = mix(lit, skyCol(normalize(vec3f(rd.x, max(rd.y, 0.0) * 0.15, rd.z)), Ls, false), fa);
   lit = pow(clamp(lit, vec3f(0.0), vec3f(1.0)), vec3f(0.92));
-  return vec4f(lit * alpha, alpha);
+  return vec4f(lit, 1.0);
 }
 `;
 
@@ -821,20 +740,21 @@ function create(env) {
   const galPipe = device.createRenderPipeline({ layout: galL.p, vertex: { module: galMod, entryPoint: 'vs' }, fragment: { module: galMod, entryPoint: 'fs', targets: [{ format, blend: additive }] } });
   const sprPipe = device.createRenderPipeline({ layout: sprL.p, vertex: { module: sprMod, entryPoint: 'vs' }, fragment: { module: sprMod, entryPoint: 'fs', targets: [{ format, blend: premul }] } });
   const plPipe = device.createRenderPipeline({ layout: plL.p, vertex: { module: plMod, entryPoint: 'vs' }, fragment: { module: plMod, entryPoint: 'fs', targets: [{ format }] } });
-  const surfPipe = device.createRenderPipeline({ layout: plL.p, vertex: { module: surfMod, entryPoint: 'vs' }, fragment: { module: surfMod, entryPoint: 'fs', targets: [{ format }] } });
+  const surfPipe = device.createRenderPipeline({ layout: plL.p, vertex: { module: surfMod, entryPoint: 'vs' }, fragment: { module: surfMod, entryPoint: 'fs', targets: [{ format }] }, depthStencil: { format: 'depth32float', depthWriteEnabled: true, depthCompare: 'always' } });
   const objPipe = device.createRenderPipeline({ layout: plL.p, vertex: { module: objMod, entryPoint: 'vs' }, fragment: { module: objMod, entryPoint: 'fs', targets: [{ format }] } });
   const objU = device.createBuffer({ size: 112, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
   const objBG = device.createBindGroup({ layout: plL.b, entries: [{ binding: 0, resource: { buffer: objU } }] });
   const surfCL = mkLayout([{ binding: 0, visibility: V | F, buffer: { type: 'uniform' } }, { binding: 1, visibility: V, buffer: { type: 'read-only-storage' } }]);
-  const crPipe = device.createRenderPipeline({ layout: surfCL.p, vertex: { module: surfMod, entryPoint: 'vsC' }, fragment: { module: surfMod, entryPoint: 'fsC', targets: [{ format, blend: premul }] } });
+  const crPipe = device.createRenderPipeline({ layout: surfCL.p, vertex: { module: surfMod, entryPoint: 'vsM' }, fragment: { module: surfMod, entryPoint: 'fsM', targets: [{ format }] }, primitive: { topology: 'triangle-list', cullMode: 'none' }, depthStencil: { format: 'depth32float', depthWriteEnabled: true, depthCompare: 'less' } });
   const U = GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, ST = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST;
   const galU = device.createBuffer({ size: 96, usage: U }), sprU = device.createBuffer({ size: 80, usage: U }), plU = device.createBuffer({ size: 192, usage: U });
   const plBG = device.createBindGroup({ layout: plL.b, entries: [{ binding: 0, resource: { buffer: plU } }] });
   const surfU = device.createBuffer({ size: 256, usage: U });
   const surfBG = device.createBindGroup({ layout: plL.b, entries: [{ binding: 0, resource: { buffer: surfU } }] });
-  const MAXC = 700, crBuf = device.createBuffer({ size: MAXC * 64, usage: ST });
+  const MAXC = 9000, crBuf = device.createBuffer({ size: MAXC * 64, usage: ST }); // 立体の部品の上限
   const crBG = device.createBindGroup({ layout: surfCL.b, entries: [{ binding: 0, resource: { buffer: surfU } }, { binding: 1, resource: { buffer: crBuf } }] });
-  let crCount = 0;
+  let crCount = 0, crN = [0, 0, 0], depthTex = null, depthW = 0, depthH = 0;
+  const depthView = () => { if (!depthTex || depthW !== canvas.width || depthH !== canvas.height) { if (depthTex) depthTex.destroy(); depthW = canvas.width; depthH = canvas.height; depthTex = device.createTexture({ size: [depthW, depthH], format: 'depth32float', usage: GPUTextureUsage.RENDER_ATTACHMENT }); } return depthTex.createView(); };
   let galBufs = null, galBG = null, sprBuf = null, sprBG = null, sprCap = 0;
 
   const active = () => S.kind !== 'cosmos';
@@ -1233,7 +1153,7 @@ function create(env) {
   function enterSurface(s0) {
     const p = S.pl, b = basisAt(s0);
     S.kind = 'surface'; S.stack.push('planet');
-    S.follow = null; S.near = [];
+    S.follow = null; S.near = []; cellCache.clear();
     S.sf = { s0, Eb: b.E, Nb: b.N, wx: 0, wz: 0, sel: 0, lat: b.lat, lon: b.lon, hd: 0 };
     Object.assign(cams.surface, { az: 0, el: 0.12, dist: 1 });
     clearLabels(); env.onEnter('surface');
@@ -1258,8 +1178,41 @@ function create(env) {
     if (w) { const m = w.ms; return (m.electric || m.computer) ? 4 : m.machine ? 3 : m.city ? 2 : m.agri ? 1 : 0; }
     return b.real ? 4 : 0;
   }
+  // 地表シェーダーの elevAt と同じ式の CPU 版(立体物を地面に正しく置くため)。戻り値: [標高km, 水かどうか]
+  function elevJS(x, z) {
+    const p = S.pl, sf = S.sf, R = p.radiusE * 6371, seed = p.seed || 1, hasWater = p.kind === 'earthlike';
+    const base = hasWater ? 0.3 + 0.4 * (p.water || 0) : 0.35, relief = Math.max(5, Math.min(150, 45 / (p.g || 1)));
+    const d = norm3([0, 1, 2].map((k) => sf.s0[k] + (sf.Eb[k] * x + sf.Nb[k] * z) / R));
+    const h = terrainH(d, seed), land = Math.max(h - base, 0);
+    let sum = 0, am = 0.5, nrm = 0, qx = x * 0.35, qy = z * 0.35, qz = seed;
+    for (let k = 0; k < 5; k++) { sum += am * noise3(qx, qy, qz); nrm += am; qx = qx * 2.02 + 1.7; qy = qy * 2.02 + 9.2; qz = qz * 2.02 + 3.3; am *= 0.5; }
+    const e = land * relief + (sum / nrm - 0.5) * 0.9 * (0.12 + Math.min(land * 5, 1)) * smoothstep01(0, 0.02, land);
+    return [Math.max(e, 0), hasWater && h < base];
+  }
+  // 部品を足す: out[形] に16個ずつ。形: 0=箱 1=球 2=円すい。大きさは「半分の長さ」
+  const part = (out, prim, ax, ay, az, yaw, s, ox, oy, oz, sx, sy, sz, col, mat, rot, mode) => { out[prim].push(ax, ay, az, yaw, ox * s, oy * s, oz * s, rot || 0, sx * s, sy * s, sz * s, mode || 0, col[0], col[1], col[2], prim * 10 + mat); };
+  const cellCache = new Map();
+  function emitCreature(out, v, tsec) {
+    const x = v[0], z = v[1], s = v[2], kind = v[3], c1 = [v[4], v[5], v[6]], c2 = [v[8], v[9], v[10]], ph = v[11], yaw = v[12], hab = v[13], alt = v[14];
+    const [el, wet] = elevJS(x, z);
+    if ((hab === 0 && wet) || (hab === 1 && !wet)) return;
+    const y = hab === 1 ? -0.12 * s : el + alt, P = (prim, ox, oy, oz, sx, sy, sz, col, rot, mode) => part(out, prim, x, y, z, yaw, s, ox, oy, oz, sx, sy, sz, col, 3, rot, mode);
+    const legs = (xs, hy, len, th, zs) => { let k = 0; for (const lx of xs) for (const lz of [-zs, zs]) { P(0, lx, hy, lz, th, len / 2, th, c2, 0.5 * Math.sin(ph * 3 + k * Math.PI + lx * 3), 1); k++; } };
+    if (kind === 0) {
+      const plan = Math.floor(v[7] / 10);
+      if (plan === 1) { P(1, 0, 0.45, 0, 0.5, 0.19, 0.2, c1); P(0, 0.52, 0.72, 0, 0.26, 0.06, 0.06, c1, 0.95, 4); P(1, 0.72, 0.97, 0, 0.12, 0.07, 0.07, c2); P(0, -0.72, 0.42, 0, 0.3, 0.035, 0.035, c1, 0.25, 4); legs([-0.3, 0.3], 0.36, 0.36, 0.05, 0.12); }
+      else if (plan === 2) { P(1, 0, 0.28, 0, 0.55, 0.17, 0.26, c1); P(1, 0.6, 0.3, 0, 0.15, 0.13, 0.14, c2); legs([-0.3, 0, 0.3], 0.24, 0.24, 0.025, 0.24); }
+      else if (plan === 3) { P(1, 0, 0.6, 0, 0.28, 0.27, 0.2, c1); P(0, 0.22, 0.84, 0, 0.14, 0.05, 0.05, c1, 1.1, 4); P(1, 0.34, 0.97, 0, 0.11, 0.07, 0.07, c2); P(0, -0.4, 0.55, 0, 0.16, 0.04, 0.04, c1, 0.2, 4); legs([0], 0.42, 0.42, 0.045, 0.1); }
+      else if (plan === 4) { for (let k = 0; k < 7; k++) P(1, -0.75 + 0.25 * k, 0.09, 0.09 * Math.sin(ph * 2 + k), 0.14, 0.085, 0.085, k === 6 ? c2 : c1); }
+      else if (plan === 5) { P(1, 0, 0.64, 0, 0.4, 0.14, 0.14, c1); P(0, 0.42, 0.8, 0, 0.15, 0.045, 0.045, c1, 1.0, 4); P(1, 0.52, 0.94, 0, 0.12, 0.07, 0.07, c2); legs([-0.28, 0.28], 0.56, 0.56, 0.03, 0.09); }
+      else { P(1, 0, 0.52, 0, 0.5, 0.2, 0.2, c1); P(1, 0.58, 0.64, 0, 0.16, 0.14, 0.13, c2); P(0, -0.6, 0.55, 0, 0.12, 0.03, 0.03, c1, 0.2, 4); legs([-0.3, 0.3], 0.42, 0.42, 0.045, 0.11); }
+    } else if (kind === 1) { const f = 0.7 * Math.sin(ph * 6); P(1, 0, 0, 0, 0.3, 0.12, 0.12, c1); P(1, 0.3, 0.06, 0, 0.09, 0.08, 0.08, c2); P(0, 0, 0.03, 0.08, 0.13, 0.012, 0.28, c2, f, 2); P(0, 0, 0.03, -0.08, 0.13, 0.012, 0.28, c2, -f, 3); P(0, -0.36, 0, 0, 0.12, 0.01, 0.07, c1); }
+    else if (kind === 2) { P(1, 0, 0, 0, 0.6, 0.2, 0.12, c1); P(0, -0.7, 0, 0, 0.15, 0.17, 0.02, c2, 0.3 * Math.sin(ph * 5), 0); P(0, 0, 0.2, 0, 0.14, 0.08, 0.015, c2); }
+    else { const sw = 0.6 * Math.sin(ph * 3); P(0, 0, 0.62, 0, 0.07, 0.17, 0.11, c1); P(1, 0, 0.9, 0, 0.09, 0.1, 0.09, c2); P(0, 0, 0.46, 0.06, 0.045, 0.23, 0.045, c2, sw, 1); P(0, 0, 0.46, -0.06, 0.045, 0.23, 0.045, c2, -sw, 1); P(0, 0, 0.77, 0.15, 0.035, 0.16, 0.035, c1, -sw, 1); P(0, 0, 0.77, -0.15, 0.035, 0.16, 0.035, c1, sw, 1); }
+  }
   function buildCreatures(sf, tsec) {
-    const p = S.pl, F = S.fauna || [], by = (k) => F.filter((x) => x.kind === k), data = new Float32Array(MAXC * 16), list = [];
+    const p = S.pl, F = S.fauna || [], by = (k) => F.filter((x) => x.kind === k), list = [], out = [[], [], []];
+    const stat = (x, z, fn) => { const [el, wet] = elevJS(x, z); if (!wet) fn(el); }; // 動かない物(木・建物): 陸の上だけ
     const eco = S.eco, pfac = eco ? 0.25 + 0.75 * Math.min(1, eco.plantFrac()) : 1;
     const plants = by(3), animals = eco ? by(0).filter(x => eco.species.some(q => q.vis.name === x.name && q.ext === null && q.count > 0)) : by(0), birds = eco ? by(1).filter(x => eco.species.some(q => q.vis.name === x.name && q.ext === null && q.count > 0)) : by(1), fish = by(2), people = by(4), lvl = S.civNow || 0;
     const cell = 0.04, R = 7, seed = Math.floor((p.seed || 1) * 1000) | 0;
@@ -1280,22 +1233,41 @@ function create(env) {
     for (let dj = -R; dj <= R; dj++) for (let di = -R; di <= R; di++) {
       if (di * di + dj * dj > R * R) continue;
       const ci = ci0 + di, cj = cj0 + dj, r = (k) => hh(seed, ci, cj, k), X = (k) => (ci + r(k)) * cell, Z = (k) => (cj + r(k + 50)) * cell;
-      if (plants.length && r(1) < 0.45 * pfac) { const sp = pick(plants, r(2)); add(3, X(3), Z(3), sp.size * (0.7 + 0.6 * r(4)), sp, sp.legs, r(5) * 6.28 + tsec * 1.2, 0, 0, 0, [0.9, 0.9, 0.85][sp.legs] || 0.9, sp.col, sp.col2); }
+      const ck = ci + ',' + cj + ',' + lvl + ',' + Math.round(pfac * 4) + ',' + plants.length;
+      let cc = cellCache.get(ck);
+      if (!cc) {
+        const o2 = [[], [], []];
+        if (plants.length && r(1) < 0.45 * pfac) {
+          const sp = pick(plants, r(2)), x = X(3), z = Z(3), sz = sp.size * (0.7 + 0.6 * r(4)), yaw = r(5) * 6.28;
+          stat(x, z, (el) => { const Q = (prim, ox, oy, oz, sx, sy, s2, col, mat) => part(o2, prim, x, el, z, yaw, sz, ox, oy, oz, sx, sy, s2, col, mat);
+            if (sp.legs === 1) { Q(0, 0, 0.1, 0, 0.03, 0.1, 0.03, sp.col2, 0); Q(2, 0, 0.36, 0, 0.36, 0.2, 0.36, sp.col, 2); Q(2, 0, 0.6, 0, 0.27, 0.18, 0.27, sp.col, 2); Q(2, 0, 0.82, 0, 0.17, 0.17, 0.17, sp.col, 2); }
+            else if (sp.legs === 2) { Q(1, -0.22, 0.2, 0, 0.36, 0.22, 0.3, sp.col, 2); Q(1, 0.2, 0.26, 0.1, 0.38, 0.27, 0.32, sp.col, 2); }
+            else { Q(0, 0, 0.25, 0, 0.035, 0.25, 0.035, sp.col2, 0); Q(1, 0, 0.72, 0, 0.42, 0.3, 0.42, sp.col, 2); Q(1, -0.25, 0.6, 0.1, 0.28, 0.22, 0.28, sp.col, 2); Q(1, 0.25, 0.62, -0.12, 0.28, 0.22, 0.28, sp.col, 2); } });
+        }
+        if (lvl >= 1 && people.length) {
+          const wall = [[0.62, 0.5, 0.36], [0.72, 0.68, 0.6], [0.55, 0.58, 0.62], [0.7, 0.74, 0.78]], roof = [[0.42, 0.3, 0.16], [0.55, 0.25, 0.2], [0.3, 0.3, 0.32], [0.3, 0.35, 0.4]];
+          const cx = (ci + 0.5) * cell * 0.8, cz = (cj + 0.5) * cell * 0.8, town = smoothstep01(0.5, 0.62, noise3js(cx, cz, 11)), core = smoothstep01(0.6, 0.7, noise3js(cx, cz, 11));
+          const bld = (lv, prob, size, k) => { if (lvl < lv + 1 || r(k) >= prob) return; const x = X(k + 1), z = Z(k + 1), sz = size * (0.8 + 0.4 * r(k + 2)), yaw = r(k + 3) < 0.5 ? 0 : 1.5708;
+            stat(x, z, (el) => { const Q = (prim, ox, oy, oz, sx, sy, s2, col, mat) => part(o2, prim, x, el, z, yaw, sz, ox, oy, oz, sx, sy, s2, col, mat);
+              if (lv === 0) { Q(0, 0, 0.3, 0, 0.45, 0.3, 0.45, wall[0], 0); Q(2, 0, 0.82, 0, 0.66, 0.24, 0.66, roof[0], 0); }
+              else if (lv === 1) { Q(0, 0, 0.32, 0, 0.7, 0.32, 0.5, wall[1], 1); Q(2, 0, 0.82, 0, 0.9, 0.2, 0.66, roof[1], 0); }
+              else if (lv === 2) { Q(0, 0, 0.5, 0, 0.2, 0.5, 0.2, wall[2], 1); Q(0, 0, 1.02, 0, 0.22, 0.02, 0.22, roof[2], 0); }
+              else { Q(0, 0, 0.45, 0, 0.26, 0.45, 0.26, wall[3], 1); Q(0, 0, 0.95, 0, 0.18, 0.06, 0.18, wall[3], 1); Q(0, 0, 1.06, 0, 0.012, 0.06, 0.012, roof[3], 0); } }); };
+          if (lvl >= 1) { bld(0, 0.10 * town, 0.0038, 60); bld(0, 0.035 * town, 0.0055, 70); }
+          if (lvl >= 2) { bld(1, 0.24 * town, 0.008, 80); bld(0, 0.10 * town, 0.0045, 90); }
+          if (lvl >= 3) bld(2, 0.07 * core, 0.035, 100);
+          if (lvl >= 4) bld(3, 0.06 * core, 0.07, 110);
+          bld(0, lvl >= 2 ? 0.012 : 0.045, 0.004, 30); if (lvl < 2) bld(1, 0.025, 0.008, 40);
+        }
+        cc = o2.map((arr) => new Float32Array(arr));
+        if (cellCache.size > 1500) cellCache.clear();
+        cellCache.set(ck, cc);
+      }
+      for (let q = 0; q < 3; q++) for (let t = 0; t < cc[q].length; t++) out[q].push(cc[q][t]);
       if (!eco && animals.length && r(6) < 0.05) { const sp = pick(animals, r(7)), a = tsec * 0.25 * sp.speed + r(8) * 6.28; add(0, X(9) + 0.012 * Math.sin(a), Z(9) + 0.012 * Math.cos(a), sp.size, sp, sp.legs + 10 * (sp.plan || 0), tsec * sp.speed * 2 + r(10) * 6, Math.atan2(Math.cos(a), -Math.sin(a)), 0, 0, 1.4, sp.col, sp.col2, mk(sp, 1, ci, cj)); }
       if (!eco && birds.length && r(11) < 0.03) { const sp = pick(birds, r(12)), a = tsec * 0.5 * sp.speed + r(13) * 6.28; add(1, X(14) + 0.03 * Math.sin(a), Z(14) + 0.03 * Math.cos(a), sp.size, sp, 0, tsec * sp.speed * 2 + r(15) * 6, Math.atan2(Math.cos(a), -Math.sin(a)), 2, 0.02 + 0.04 * r(16), 1.0, sp.col, sp.col2, mk(sp, 2, ci, cj)); }
       if (!eco && fish.length && r(17) < 0.08) { const sp = pick(fish, r(18)), a = tsec * 0.2 * sp.speed + r(19) * 6.28; add(2, X(20) + 0.008 * Math.sin(a), Z(20) + 0.008 * Math.cos(a), sp.size, sp, 0, tsec * sp.speed * 2 + r(21) * 6, Math.atan2(Math.cos(a), -Math.sin(a)), 1, 0, 1.1, sp.col, sp.col2, mk(sp, 3, ci, cj)); }
       if (people.length && lvl >= 0 && r(22) < (lvl ? 0.012 : 0.006)) { const sp = people[0], a = tsec * 0.1 + r(23) * 6.28; add(4, X(24) + 0.005 * Math.sin(a), Z(24) + 0.005 * Math.cos(a), sp.size, sp, 0, tsec * 3 + r(25) * 6, Math.atan2(Math.cos(a), -Math.sin(a)), 0, 0, 0.5, sp.col, sp.col2, mk(sp, 4, ci, cj)); }
-      if (lvl >= 1 && people.length) {
-        const wall = [[0.62, 0.5, 0.36], [0.72, 0.68, 0.6], [0.55, 0.58, 0.62], [0.7, 0.74, 0.78]], roof = [[0.42, 0.3, 0.16], [0.55, 0.25, 0.2], [0.3, 0.3, 0.32], [0.3, 0.35, 0.4]];
-        const town = smoothstep01(0.5, 0.62, noise3js((ci + 0.5) * cell * 0.8, (cj + 0.5) * cell * 0.8, 11)), core = smoothstep01(0.6, 0.7, noise3js((ci + 0.5) * cell * 0.8, (cj + 0.5) * cell * 0.8, 11));
-        const tryT = (lv, prob, size, wr, k) => { if (lvl >= lv + 1 && r(k) < prob && Math.hypot(X(k + 1) - sf.wx, Z(k + 1) - sf.wz) > 0.06) add(5, X(k + 1), Z(k + 1), size * (0.8 + 0.4 * r(k + 2)), null, lv, 0, 0, 0, 0, wr, wall[lv], roof[lv]); };
-        if (lvl >= 1) { tryT(0, 0.10 * town, 0.0038, 1.0, 60); tryT(0, 0.035 * town, 0.0055, 1.15, 63); }
-        if (lvl >= 2) { tryT(1, 0.24 * town, 0.008, 1.2, 64); tryT(0, 0.10 * town, 0.0045, 1.0, 65); }
-        if (lvl >= 3) tryT(2, 0.07 * core, 0.035, 0.5, 66);
-        if (lvl >= 4) tryT(3, 0.06 * core, 0.07, 0.6, 69);
-        const tryS = (lv, prob, size, wr, k) => { if (lvl >= lv + 1 && r(k) < prob && Math.hypot(X(k + 1) - sf.wx, Z(k + 1) - sf.wz) > 0.06) add(5, X(k + 1), Z(k + 1), size * (0.8 + 0.4 * r(k + 2)), null, lv, 0, 0, 0, 0, wr, wall[lv], roof[lv]); };
-        tryS(0, lvl >= 2 ? 0.012 : 0.045, 0.004, 1.0, 30); if (lvl < 2) tryS(1, 0.025, 0.008, 1.2, 33);
-      }
     }
     list.sort((a, b) => b.d2 - a.d2);
     // ---- 近くの生き物を「一匹ずつ」の個体として扱う(名前・性別・年齢・体力・行動)。状態は個体の番号と時刻から決まる。
@@ -1322,9 +1294,14 @@ function create(env) {
       if (!f) S.follow = null;
       else { const cam = cams.surface; let d = f.bearing - cam.az; d = ((d + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI; cam.az += d * 0.12; cam.el += (0.05 - cam.el) * 0.1; }
     }
-    crCount = Math.min(list.length, MAXC);
-    for (let i = 0; i < crCount; i++) data.set(list[i].v, i * 16);
-    device.queue.writeBuffer(crBuf, 0, data, 0, crCount * 16);
+    for (const e of list) emitCreature(out, e.v, tsec);
+    // 形ごとにまとめて送る(箱→球→円すい)
+    let nb = out[0].length / 16, ns = out[1].length / 16, nc = out[2].length / 16;
+    if (nb + ns + nc > MAXC) { const k = MAXC / (nb + ns + nc); nb = Math.floor(nb * k); ns = Math.floor(ns * k); nc = Math.floor(nc * k); }
+    const data = new Float32Array((nb + ns + nc) * 16);
+    data.set(out[0].slice(0, nb * 16), 0); data.set(out[1].slice(0, ns * 16), nb * 16); data.set(out[2].slice(0, nc * 16), (nb + ns) * 16);
+    crN = [nb, ns, nc]; crCount = nb + ns + nc;
+    if (crCount) device.queue.writeBuffer(crBuf, 0, data);
   }
   // ---- 生態系(eco.js)を地表に結びつける
   function makeEco(p, sf) {
@@ -1375,7 +1352,7 @@ function create(env) {
     u.set([...sf.s0, R], 16); u.set([...sf.Eb, relief], 20); u.set([...sf.Nb, hasWater ? sea : 0.35], 24);
     u.set([sf.wx, sf.wz, p.seed || 1, kind], 28); u.set(atm, 32); u.set([bb[0] / bm, bb[1] / bm, bb[2] / bm, half], 36);
     const veg = vegOf(p), lvl = S.civNow = civLevel();
-    u.set([p.tsurf || 280, greenOf(p), hasWater, sea], 40); u.set([Math.abs(sf.s0[1]), ...veg.a], 44); u.set([lvl, 0, 0, 0], 48);
+    u.set([p.tsurf || 280, greenOf(p), hasWater, sea], 40); u.set([Math.abs(sf.s0[1]), ...veg.a], 44); u.set([lvl, p.kind === 'earthlike' ? 0.5 : p.kind === 'frozen' ? 0.35 : p.kind === 'venus' ? 0.9 : p.kind === 'desert' ? 0.12 : 0, elevJS(sf.wx, sf.wz)[0], 0], 48);
     device.queue.writeBuffer(surfU, 0, u);
     // 生態系は世界時間(worldYears)側だけで進める。描画dtでの二重進行を廃止。
     buildCreatures(sf, performance.now() / 1000);
@@ -1490,7 +1467,9 @@ function create(env) {
     }
     const W = canvas.clientWidth, H = canvas.clientHeight;
     const enc = device.createCommandEncoder();
-    const pass = enc.beginRenderPass({ colorAttachments: [{ view: ctx.getCurrentTexture().createView(), clearValue: { r: 0, g: 0, b: 0.008, a: 1 }, loadOp: 'clear', storeOp: 'store' }] });
+    const desc = { colorAttachments: [{ view: ctx.getCurrentTexture().createView(), clearValue: { r: 0, g: 0, b: 0.008, a: 1 }, loadOp: 'clear', storeOp: 'store' }] };
+    if (S.kind === 'surface') desc.depthStencilAttachment = { view: depthView(), depthClearValue: 1, depthLoadOp: 'clear', depthStoreOp: 'store' }; // 地表だけ奥行きを使う
+    const pass = enc.beginRenderPass(desc);
     if (S.kind === 'galaxy') {
       const cam = cams.galaxy, g = S.gal;
       const vp = mul(perspective(0.9, canvas.width / canvas.height, 0.005, 100), lookAt(...viewOf(cam), [0, 1, 0]));
@@ -1520,7 +1499,7 @@ function create(env) {
       planetFrame(dtReal, W, H); // 惑星の自転と太陽の向きの更新(軌道の絵は描かない)
       surfaceFrame(dtReal, W, H);
       pass.setPipeline(surfPipe); pass.setBindGroup(0, surfBG); pass.draw(3);
-      if (crCount) { pass.setPipeline(crPipe); pass.setBindGroup(0, crBG); pass.draw(6, crCount); }
+      if (crCount) { pass.setPipeline(crPipe); pass.setBindGroup(0, crBG); if (crN[0]) pass.draw(36, crN[0], 0, 0); if (crN[1]) pass.draw(360, crN[1], 0, crN[0]); if (crN[2]) pass.draw(48, crN[2], 0, crN[0] + crN[1]); }
     }
     pass.end(); device.queue.submit([enc.finish()]);
     env.setInfo(info());
